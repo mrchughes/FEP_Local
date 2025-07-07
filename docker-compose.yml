@@ -4,7 +4,6 @@ services:
     build:
       context: ./mern-app/backend
       dockerfile: Dockerfile
-    # environment block removed to allow .env file in container to be used
     ports:
       - "5050:5050"
     depends_on:
@@ -19,6 +18,20 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3000:80"
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  ai-agent:
+    build:
+      context: ./python-app/app/ai_agent
+      dockerfile: Dockerfile
+    ports:
+      - "5100:5000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - funny_prompt=you are a helpful assistant. You provide sensitive advice to people who have been bereaved. You should query dwp policy online if unsure. Keep answers concise
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
     restart: unless-stopped
     networks:
       - app-network
