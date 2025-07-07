@@ -1,0 +1,28 @@
+version: '3.8'
+services:
+  backend:
+    build:
+      context: ./mern-app/backend
+      dockerfile: Dockerfile
+    # environment block removed to allow .env file in container to be used
+    ports:
+      - "5050:5050"
+    depends_on:
+      - frontend
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: ./mern-app/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

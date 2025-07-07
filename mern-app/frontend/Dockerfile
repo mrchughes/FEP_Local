@@ -8,7 +8,9 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 
-# Copy remaining source code
+
+# Copy .env first so React build picks up environment variables
+COPY .env .env
 COPY . .
 
 # Build your production-ready frontend

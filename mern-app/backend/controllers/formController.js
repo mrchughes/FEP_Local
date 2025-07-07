@@ -1,6 +1,6 @@
 // Fully implemented real code for backend/controllers/formController.js
 const asyncHandler = require("express-async-handler");
-const { uploadFormToS3, getPreSignedUrl } = require("../services/s3Service");
+// S3 functionality removed
 const { saveFormData, getFormData, clearFormData } = require("../services/dynamodbService");
 
 const submitForm = asyncHandler(async (req, res) => {
@@ -26,18 +26,10 @@ const submitForm = asyncHandler(async (req, res) => {
             savedAt: new Date().toISOString()
         });
     } else {
-        // For final submission, upload to S3 and provide download link
-        const key = `forms/${userEmail}-${Date.now()}.json`;
-        await uploadFormToS3(sanitizedFormData, key);
-
-        const url = await getPreSignedUrl(key);
-
-        // Clear the saved form data after successful final submission
+        // For final submission, just clear the saved form data and return success
         await clearFormData(userEmail);
-
-        res.json({ 
-            message: "Form submitted successfully", 
-            downloadUrl: url,
+        res.json({
+            message: "Form submitted successfully",
             submittedAt: new Date().toISOString()
         });
     }
