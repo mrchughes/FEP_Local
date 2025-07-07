@@ -1,0 +1,153 @@
+/* GOV.UK Design System overrides and enhancements */
+
+/* Footer optimizations for better spacing */
+.govuk-footer {
+    border-top: 10px solid #1d70b8;
+    padding-top: 25px;
+    padding-bottom: 25px;
+}
+
+.govuk-footer__meta {
+    padding-top: 15px;
+    padding-bottom: 15px;
+}
+
+.govuk-footer__inline-list {
+    margin-bottom: 15px;
+}
+
+.govuk-footer__inline-list-item {
+    margin-right: 15px;
+    margin-bottom: 5px;
+}
+
+.govuk-footer__licence-wrapper {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.govuk-footer__licence-logo {
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.govuk-footer__licence-description {
+    flex: 1;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+/* Header optimizations */
+.govuk-header {
+    border-bottom: 10px solid #1d70b8;
+}
+
+.govuk-header__container {
+    border-bottom: none;
+}
+
+.govuk-phase-banner {
+    border-bottom: 1px solid #b1b4b6;
+}
+
+.govuk-phase-banner__content {
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+
+/* Main content wrapper for better page structure */
+.govuk-main-wrapper {
+    padding-top: 20px;
+    padding-bottom: 20px;
+    min-height: calc(100vh - 200px);
+}
+
+/* Skip link improvements */
+.govuk-skip-link {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.govuk-skip-link:focus {
+    position: absolute;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    clip-path: none;
+    white-space: normal;
+    z-index: 999999;
+    top: 0;
+    left: 0;
+    padding: 8px 16px;
+    background-color: #ffdd00;
+    color: #0b0c0c;
+    text-decoration: none;
+    font-family: "GDS Transport", arial, sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.14286;
+}
+
+/* Responsive footer improvements */
+@media (max-width: 40.0625em) {
+    .govuk-footer__inline-list-item {
+        display: block;
+        margin-right: 0;
+        margin-bottom: 10px;
+    }
+    
+    .govuk-footer__licence-wrapper {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .govuk-footer__licence-logo {
+        align-self: flex-start;
+    }
+}
+
+/* Ensure proper text wrapping in footer links */
+.govuk-footer__inline-list {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+/* Better visual hierarchy for service name */
+.govuk-header__service-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: #ffffff;
+    text-decoration: none;
+}
+
+.govuk-header__service-name:link,
+.govuk-header__service-name:visited {
+    color: #ffffff;
+}
+
+.govuk-header__service-name:hover {
+    text-decoration: underline;
+    text-decoration-thickness: 3px;
+    text-underline-offset: 0.1em;
+}
+
+.govuk-header__service-name:focus {
+    color: #0b0c0c;
+    background-color: #ffdd00;
+    box-shadow: 0 -2px #ffdd00, 0 4px #0b0c0c;
+    text-decoration: none;
+}

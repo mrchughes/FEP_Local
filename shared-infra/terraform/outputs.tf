@@ -1,0 +1,16 @@
+output "alb_dns_name" { value = module.alb.alb_dns_name }
+output "vpc_id" { value = module.vpc.vpc_id }
+output "public_subnet_ids" { value = module.vpc.public_subnet_ids }
+output "private_subnet_ids" { value = module.vpc.private_subnet_ids }
+output "ecr_repo_frontend" { value = module.ecr.app1_frontend_repo_url }
+output "ecr_repo_backend" { value = module.ecr.app1_backend_repo_url }
+output "ecr_repo_app2" { value = module.ecr.app2_repo_url }
+output "route53_zone_id" { value = module.route53.zone_id }
+output "route53_name_servers" { value = module.route53.name_servers }
+output "ecs_task_execution_role_arn" { value = module.iam.ecs_task_execution_role_arn }
+output "app1_tg_arn" { value = module.alb.app1_tg_arn }
+output "app2_tg_arn" { value = module.alb.app2_tg_arn }
+output "backend_api_tg_arn" { value = module.alb.backend_api_tg_arn }
+output "s3_bucket_name" { value = module.s3.bucket_name }
+output "dynamodb_table_name" { value = module.dynamodb.table_name }
+output "domain_name" { value = var.domain_name }

@@ -1,0 +1,98 @@
+// Fully implemented real code for frontend/src/api.js
+import axios from "axios";
+
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+
+// Create axios instance with default config
+const api = axios.create({
+    baseURL: API_URL,
+    timeout: 10000, // 10 second timeout
+    headers: {
+        'Content-Type': 'application/json',
+    },
+});
+
+// Request interceptor for auth token
+api.interceptors.request.use(
+    (config) => {
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        if (user.token) {
+            config.headers.Authorization = `Bearer ${user.token}`;
+        }
+        return config;
+    },
+    (error) => Promise.reject(error)
+);
+
+// Response interceptor for error handling
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response?.status === 401) {
+            localStorage.removeItem('user');
+            window.location.href = '/';
+        }
+        return Promise.reject(error);
+    }
+);
+
+export const register = async (userData) => {
+    try {
+        const res = await api.post('/auth/register', userData);
+        return res.data;
+    } catch (error) {
+        throw new Error(error.response?.data?.message || 'Registration failed');
+    }
+};
+
+export const login = async (userData) => {
+    try {
+        const res = await api.post('/auth/login', userData);
+        return res.data;
+    } catch (error) {
+        throw new Error(error.response?.data?.message || 'Login failed');
+    }
+};
+
+export const submitForm = async (formData, token) => {
+    try {
+        const res = await api.post('/forms/submit', formData, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        });
+        return res.data;
+    } catch (error) {
+        throw new Error(error.response?.data?.message || 'Form submission failed');
+    }
+};
+
+// Auto-save form data as in-progress (not final submission)
+export const autoSaveForm = async (formData) => {
+    try {
+        const res = await api.post('/forms/submit', {
+            ...formData,
+            isAutoSave: true
+        });
+        return res.data;
+    } catch (error) {
+        throw new Error(error.response?.data?.message || 'Auto-save failed');
+    }
+};
+
+export const getResumeData = async (token) => {
+    try {
+        const res = await api.get('/forms/resume', {
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        });
+        return res.data;
+    } catch (error) {
+        // Return null if no data found instead of throwing error
+        if (error.response?.status === 404) {
+            return null;
+        }
+        throw new Error(error.response?.data?.message || 'Failed to fetch resume data');
+    }
+};
