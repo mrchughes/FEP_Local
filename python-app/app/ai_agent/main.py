@@ -1,4 +1,3 @@
-
 # app_with_background.py
 
 from dotenv import load_dotenv
@@ -33,6 +32,12 @@ if os.path.exists(persist_dir):
     except Exception:
         rag_db = None
 # 5. Flask route for the UI with background image
+
+
+# Health check endpoint
+@app.route('/ai-agent/health', methods=['GET'])
+def health():
+    return jsonify({'status': 'ok'}), 200
 
 # Upload endpoint
 @app.route('/upload', methods=['POST'])
@@ -178,6 +183,25 @@ def chat():
     else:
         full_response = result['response']        
     return jsonify({"response": full_response})
+
+@app.route('/check-form', methods=['POST'])
+def check_form():
+    content = request.json.get('content', '')
+    # Prompt for policy verification
+    policy_prompt = (
+        "You are a DWP policy expert. Review the following form questions and answers. "
+        "Identify any answers that do not comply with DWP policy or may need amending. "
+        "Suggest improvements or flag any issues.\n\n" + content
+    )
+    # Use RAG if available
+    if rag_db is not None:
+        docs = rag_db.similarity_search(content, k=3)
+        context = "\n\n".join([d.page_content for d in docs])
+        policy_prompt = (
+            f"Use the following DWP policy context to check the form:\n{context}\n\n" + policy_prompt
+        )
+    response = llm.predict(policy_prompt)
+    return jsonify({"response": response})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

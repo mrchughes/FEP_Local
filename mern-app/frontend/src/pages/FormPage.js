@@ -10,6 +10,7 @@ import {
     saveSectionProgress,
     clearSectionProgress 
 } from "../utils/formProgress";
+import ChatbotWidget from "../components/ChatbotWidget";
 
 const FormPage = () => {
     const { user } = useContext(AuthContext);
@@ -2197,7 +2198,6 @@ const FormPage = () => {
                 <div className="govuk-grid-row">
                     <div className="govuk-grid-column-two-thirds">
                         {/* Breadcrumbs removed as requested */}
-
                         <span className="govuk-caption-xl">Step {currentStep} of 13</span>
                         <h1 className="govuk-heading-xl">Apply for funeral expenses payment</h1>
                         
@@ -2271,6 +2271,7 @@ const FormPage = () => {
                     </div>
                 </div>
             </main>
+            <ChatbotWidget />
         </div>
     );
 };

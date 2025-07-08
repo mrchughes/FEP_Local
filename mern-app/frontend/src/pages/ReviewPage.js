@@ -4,11 +4,14 @@ import { getResumeData, submitForm } from "../api";
 import AuthContext from "../auth/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { formSections, getConditionalFields } from "../data/formStructure";
+import ChatbotWidget from "../components/ChatbotWidget";
 
 const ReviewPage = () => {
     const [formData, setFormData] = useState({});
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState({});
+    const [aiFeedback, setAiFeedback] = useState("");
+    const [aiLoading, setAiLoading] = useState(false);
     const { user } = useContext(AuthContext);
     const navigate = useNavigate();
 
@@ -144,6 +147,23 @@ const ReviewPage = () => {
     console.log('🔍 ReviewPage: conditionalFields:', conditionalFields);
     console.log('🔍 ReviewPage: formSections:', formSections);
 
+    // Add handler for AI check
+    const handleCheckWithAI = async () => {
+        setAiLoading(true);
+        setAiFeedback("");
+        const questionsAndAnswers = Object.entries(formData)
+            .map(([q, a]) => `${q}: ${Array.isArray(a) ? a.join(', ') : a}`)
+            .join("\n");
+        const res = await fetch("/ai-agent/check-form", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content: questionsAndAnswers })
+        });
+        const data = await res.json();
+        setAiFeedback(data.response || "No feedback from AI.");
+        setAiLoading(false);
+    };
+
     return (
         <div className="govuk-width-container">
             <main className="govuk-main-wrapper" id="main-content" role="main">
@@ -252,9 +272,30 @@ const ReviewPage = () => {
                                 </div>
                             </form>
                         </div>
+
+                        <button
+                            className="govuk-button govuk-button--secondary"
+                            style={{ marginTop: 16 }}
+                            onClick={handleCheckWithAI}
+                        >
+                            Check with AI
+                        </button>
+
+                        {aiLoading && (
+                            <div className="govuk-inset-text" style={{ marginTop: 16 }}>
+                                <span className="govuk-body">Checking with AI…</span>
+                            </div>
+                        )}
+                        {aiFeedback && !aiLoading && (
+                            <div className="govuk-inset-text" style={{ marginTop: 16, background: '#e7f3f7', borderLeft: '6px solid #1d70b8' }}>
+                                <strong className="govuk-heading-s">AI Feedback</strong>
+                                <div className="govuk-body" style={{ whiteSpace: 'pre-line' }}>{aiFeedback}</div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </main>
+            <ChatbotWidget />
         </div>
     );
 };
