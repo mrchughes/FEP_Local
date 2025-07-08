@@ -72,23 +72,26 @@
     }
     </style>
     
+
     <div class="chat-container">
+        <form id="upload-form" enctype="multipart/form-data" style="margin-bottom: 20px;">
+            <label for="file-upload">Upload DWP Policy Document (PDF, DOCX, TXT): </label>
+            <input id="file-upload" type="file" name="file" accept=".pdf,.docx,.txt" required>
+            <button type="submit">Upload</button>
+            <span id="upload-status"></span>
+        </form>
         <div id="chat-box"></div>
         <input id="input" type="text" placeholder="Ask something..." autofocus>
- 
     </div>
 
     <script>
         window.onload = function () {
+            // Chat logic
             function sendMessage() {
                 const inputField = document.getElementById("input");
-                //const sendBtn = document.getElementById("send-btn");
                 const input = inputField.value.trim();
                 if (!input) return;
-
                 inputField.disabled = true;
-                //sendBtn.disabled = true;
-
                 fetch('/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -100,19 +103,38 @@
                     chatBox.innerText += "You: " + input + "\nAssistant: " + data.response + "\n\n";
                     inputField.value = "";
                     inputField.disabled = false;
-                    //sendBtn.disabled = false;
                     chatBox.scrollTop = chatBox.scrollHeight;
                 })
                 .catch(error => console.error('Error:', error));
             }
 
-            //document.getElementById("send-btn").addEventListener("click", sendMessage);
-
             document.getElementById("input").addEventListener("keydown", function(event) {
                 if (event.key === "Enter") {
-                    event.preventDefault();  // Prevent newline in input if any
+                    event.preventDefault();
                     sendMessage();
                 }
+            });
+
+            // Upload logic
+            document.getElementById("upload-form").addEventListener("submit", function(event) {
+                event.preventDefault();
+                const fileInput = document.getElementById("file-upload");
+                const status = document.getElementById("upload-status");
+                const formData = new FormData();
+                formData.append("file", fileInput.files[0]);
+                status.textContent = "Uploading...";
+                fetch("/upload", {
+                    method: "POST",
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    status.textContent = data.success ? "Upload successful!" : "Upload failed.";
+                    fileInput.value = "";
+                })
+                .catch(() => {
+                    status.textContent = "Upload failed.";
+                });
             });
         };
     </script>

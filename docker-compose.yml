@@ -36,6 +36,28 @@ services:
     networks:
       - app-network
 
+  chroma-db:
+    image: chromadb/chroma
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./python-app/app/ai_agent/chroma_db:/chroma/.chroma/index
+    environment:
+      - IS_PERSISTENT=TRUE
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - app-network
+
 networks:
   app-network:
     driver: bridge

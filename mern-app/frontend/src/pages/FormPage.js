@@ -2196,19 +2196,7 @@ const FormPage = () => {
             <main className="govuk-main-wrapper" id="main-content" role="main">
                 <div className="govuk-grid-row">
                     <div className="govuk-grid-column-two-thirds">
-                        <nav className="govuk-breadcrumbs" aria-label="Breadcrumb">
-                            <ol className="govuk-breadcrumbs__list">
-                                <li className="govuk-breadcrumbs__list-item">
-                                    <Link className="govuk-breadcrumbs__link" to="/dashboard">Your applications</Link>
-                                </li>
-                                <li className="govuk-breadcrumbs__list-item">
-                                    <Link className="govuk-breadcrumbs__link" to="/tasks">Apply for funeral expenses payment</Link>
-                                </li>
-                                <li className="govuk-breadcrumbs__list-item">
-                                    Complete section
-                                </li>
-                            </ol>
-                        </nav>
+                        {/* Breadcrumbs removed as requested */}
 
                         <span className="govuk-caption-xl">Step {currentStep} of 13</span>
                         <h1 className="govuk-heading-xl">Apply for funeral expenses payment</h1>

@@ -4,7 +4,7 @@
 from dotenv import load_dotenv
 import os
 from flask import Flask, request, jsonify, render_template
-from langchain.chat_models import ChatOpenAI
+from langchain_community.llms import Ollama
 from langgraph.graph import StateGraph, END
 # from langgraph import State
 from langchain_community.tools.tavily_search import TavilySearchResults
@@ -14,7 +14,60 @@ load_dotenv()
 openai_key = os.getenv("OPENAI_API_KEY")
 
 # Flask app setup
+from werkzeug.utils import secure_filename
+from langchain.vectorstores import Chroma
+from langchain_community.embeddings import OllamaEmbeddings
+import shutil
+
 app = Flask(__name__)
+app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'docs')
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+# RAG setup
+persist_dir = os.path.join(os.path.dirname(__file__), 'chroma_db')
+embeddings = OllamaEmbeddings(model="llama3", base_url="http://ollama:11434")
+rag_db = None
+if os.path.exists(persist_dir):
+    try:
+        rag_db = Chroma(persist_directory=persist_dir, embedding_function=embeddings)
+    except Exception:
+        rag_db = None
+# 5. Flask route for the UI with background image
+
+# Upload endpoint
+@app.route('/upload', methods=['POST'])
+def upload():
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'error': 'No file part'}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'success': False, 'error': 'No selected file'}), 400
+    filename = secure_filename(file.filename)
+    save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    file.save(save_path)
+    # Automatically ingest after upload
+    try:
+        import subprocess
+        subprocess.run([
+            'python', os.path.join(os.path.dirname(__file__), 'ingest_docs.py')
+        ], check=True)
+        global rag_db
+        rag_db = Chroma(persist_directory=persist_dir, embedding_function=embeddings)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+# RAG endpoint
+@app.route('/rag', methods=['POST'])
+def rag():
+    user_input = request.json['input']
+    if rag_db is None:
+        return jsonify({'response': 'RAG database not loaded. Please ingest documents.'})
+    docs = rag_db.similarity_search(user_input, k=3)
+    context = "\n\n".join([d.page_content for d in docs])
+    prompt = f"Use the following DWP policy context to answer:\n{context}\n\nQuestion: {user_input}"
+    response = llm.predict(prompt)
+    return jsonify({"response": response})
 
 #Funny prompt
 funny_prompt =  os.environ.get('funny_prompt')
@@ -32,9 +85,7 @@ class ConversationState(TypedDict):
     RAG: bool 
 
 # 2. Initialize the LLM and search tool
-llm_name = "gpt-3.5-turbo"
-# system_prompt = "you are a cockney geezer"
-llm = ChatOpenAI(api_key=openai_key, model=llm_name, temperature=0)
+llm = Ollama(model="llama3", base_url="http://ollama:11434")
 search_tool = TavilySearchResults()
 need_to_search = False
 
@@ -102,11 +153,25 @@ def chat():
     session_id = request.remote_addr
     history = user_sessions.get(session_id, "")
 
+    # Decide: RAG or Web
+    use_rag = False
+    if rag_db is not None:
+        # Simple heuristic: if "policy" or "DWP" in question, use RAG
+        if any(word in user_input.lower() for word in ["policy", "dwp", "regulation", "benefit"]):
+            use_rag = True
+
+    if use_rag:
+        docs = rag_db.similarity_search(user_input, k=3)
+        context = "\n\n".join([d.page_content for d in docs])
+        prompt = f"Use the following DWP policy context to answer:\n{context}\n\nQuestion: {user_input}"
+        response = llm.predict(prompt)
+        user_sessions[session_id] = history + f"\nYou: {user_input}\nAssistant: {response}"
+        return jsonify({"response": response})
+
+    # Otherwise, use web search agent
     state = ConversationState(input=user_input, history=history, search_results="")
     result = graph.invoke(state)
     user_sessions[session_id] = result['history']
-    print(state)
-    print(need_to_search)
     if need_to_search:
         full_response = "Invoking Web Search Agent... Invoking RAG Agent...\n"
         full_response += result['response']

@@ -42,8 +42,8 @@ const Navbar = () => {
                             <nav className="govuk-header__navigation" aria-label="Account navigation">
                                 <ul className="govuk-header__navigation-list">
                                     <li className="govuk-header__navigation-item">
-                                        <Link to="/dashboard" className="govuk-header__link">
-                                            Your applications
+                                        <Link to="/dashboard" className="govuk-header__link govuk-header__link--summary">
+                                            Summary Page
                                         </Link>
                                     </li>
                                     <li className="govuk-header__navigation-item">
