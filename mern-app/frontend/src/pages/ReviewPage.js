@@ -18,11 +18,11 @@ const ReviewPage = () => {
     useEffect(() => {
         const fetchData = async () => {
             if (!user?.token) return;
-            
+
             try {
                 const data = await getResumeData(user.token);
                 console.log('🔍 ReviewPage: Loaded form data:', data); // Debug log
-                
+
                 // Handle the response structure - data might be nested in formData
                 if (data && data.formData) {
                     console.log('📋 ReviewPage: Setting formData from nested structure:', data.formData); // Debug log
@@ -85,11 +85,11 @@ const ReviewPage = () => {
                 }
                 // Handle boolean checkboxes (like declarations)
                 return <span className="govuk-body">{value ? 'Yes' : 'No'}</span>;
-                
+
             case 'radio':
             case 'select':
                 return value ? <span className="govuk-body">{value}</span> : <span className="govuk-hint">Not selected</span>;
-                
+
             case 'date':
                 if (value) {
                     try {
@@ -105,7 +105,7 @@ const ReviewPage = () => {
                     }
                 }
                 return <span className="govuk-hint">Not provided</span>;
-                
+
             case 'number':
                 if (field.name === 'funeralCost') {
                     return value ? (
@@ -115,26 +115,26 @@ const ReviewPage = () => {
                     ) : <span className="govuk-hint">Not provided</span>;
                 }
                 return value ? <span className="govuk-body">{value}</span> : <span className="govuk-hint">Not provided</span>;
-                
+
             case 'email':
                 return value ? (
                     <a href={`mailto:${value}`} className="govuk-link govuk-body">
                         {value}
                     </a>
                 ) : <span className="govuk-hint">Not provided</span>;
-                
+
             case 'tel':
                 return value ? (
                     <a href={`tel:${value}`} className="govuk-link govuk-body">
                         {value}
                     </a>
                 ) : <span className="govuk-hint">Not provided</span>;
-                
+
             case 'textarea':
                 return value ? (
                     <div className="govuk-body" style={{ whiteSpace: 'pre-wrap' }}>{value}</div>
                 ) : <span className="govuk-hint">Not provided</span>;
-                
+
             default:
                 return value ? <span className="govuk-body">{value}</span> : <span className="govuk-hint">Not provided</span>;
         }
@@ -193,7 +193,7 @@ const ReviewPage = () => {
                             // Show all sections - don't filter by conditional fields for the review page
                             // Users should see all sections they've encountered in the form
                             console.log(`🔍 Rendering section "${section.title}" with ${section.fields.length} fields`);
-                            
+
                             return (
                                 <div key={section.id} className="govuk-summary-card">
                                     <div className="govuk-summary-card__title-wrapper">
@@ -222,15 +222,15 @@ const ReviewPage = () => {
                                             {section.fields
                                                 .filter(field => conditionalFields[field.name] !== false)
                                                 .map(field => (
-                                                <div key={field.name} className="govuk-summary-list__row">
-                                                    <dt className="govuk-summary-list__key">
-                                                        {field.label}
-                                                    </dt>
-                                                    <dd className="govuk-summary-list__value">
-                                                        {renderFieldValue(field, formData[field.name])}
-                                                    </dd>
-                                                </div>
-                                            ))}
+                                                    <div key={field.name} className="govuk-summary-list__row">
+                                                        <dt className="govuk-summary-list__key">
+                                                            {field.label}
+                                                        </dt>
+                                                        <dd className="govuk-summary-list__value">
+                                                            {renderFieldValue(field, formData[field.name])}
+                                                        </dd>
+                                                    </div>
+                                                ))}
                                         </dl>
                                     </div>
                                 </div>

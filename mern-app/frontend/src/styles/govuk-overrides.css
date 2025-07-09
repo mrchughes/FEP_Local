@@ -15,17 +15,20 @@
     align-items: center;
     gap: 6px;
 }
+
 .govuk-header__logotype-crown {
     height: 32px !important;
     width: 38px !important;
     margin-right: 4px;
 }
+
 .govuk-header__logotype-text {
     font-size: 32px;
     font-weight: 700;
     letter-spacing: 0.5px;
     vertical-align: middle;
 }
+
 /* GOV.UK Design System overrides and enhancements */
 
 /* Footer optimizations for better spacing */
@@ -133,12 +136,12 @@
         margin-right: 0;
         margin-bottom: 10px;
     }
-    
+
     .govuk-footer__licence-wrapper {
         flex-direction: column;
         gap: 15px;
     }
-    
+
     .govuk-footer__licence-logo {
         align-self: flex-start;
     }

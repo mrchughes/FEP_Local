@@ -47,8 +47,8 @@ const Navbar = () => {
                                         </Link>
                                     </li>
                                     <li className="govuk-header__navigation-item">
-                                        <button 
-                                            onClick={logout} 
+                                        <button
+                                            onClick={logout}
                                             className="govuk-header__link"
                                             style={{
                                                 background: 'none',

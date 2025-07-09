@@ -27,7 +27,7 @@ services:
       context: ./python-app/app/ai_agent
       dockerfile: Dockerfile
     ports:
-      - "5100:5000"
+      - "5100:5050"
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - funny_prompt=you are a helpful assistant. You provide sensitive advice to people who have been bereaved. You should query dwp policy online if unsure. Keep answers concise
@@ -35,6 +35,9 @@ services:
     restart: unless-stopped
     networks:
       - app-network
+
+    volumes:
+      - ./python-app/app/ai_agent:/app/ai_agent
 
   chroma-db:
     image: chromadb/chroma

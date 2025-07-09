@@ -30,7 +30,7 @@ splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
 splits = splitter.split_documents(docs)
 
 # Embed and store
-embeddings = OllamaEmbeddings(model="llama3", base_url="http://ollama:11434")
+embeddings = OllamaEmbeddings(model="phi3:mini", base_url="http://localhost:11434")
 db = Chroma.from_documents(splits, embeddings, persist_directory=persist_dir)
 db.persist()
 print("Ingestion complete.")

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Chris' Chatbot</title>
     <style>
@@ -22,7 +23,7 @@
         h1 {
             font-size: 3em;
             margin-bottom: 20px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.6);
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.6);
         }
 
         .chat-container {
@@ -31,7 +32,7 @@
             border-radius: 10px;
             width: 95%;
             max-width: 750px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
         }
 
         #chat-box {
@@ -45,7 +46,8 @@
             margin-bottom: 10px;
         }
 
-        #input, button {
+        #input,
+        button {
             padding: 10px;
             font-size: 1em;
         }
@@ -55,23 +57,28 @@
         }
     </style>
 </head>
+
 <body>
 
     <h1 class="title">Chris' Chatbot</h1>
 
     <style>
-    .title {
-        font-size: 3rem;
-        font-weight: 700;
-        color: white; /* bright text */
-        text-shadow: 2px 2px 6px rgba(0, 0, 0, 0.8); /* dark shadow for contrast */
-        background-color: rgba(0, 0, 0, 0.4); /* semi-transparent black bg */
-        padding: 0.5rem 1rem;
-        border-radius: 0.5rem;
-        display: inline-block; /* shrink to fit content */
-    }
+        .title {
+            font-size: 3rem;
+            font-weight: 700;
+            color: white;
+            /* bright text */
+            text-shadow: 2px 2px 6px rgba(0, 0, 0, 0.8);
+            /* dark shadow for contrast */
+            background-color: rgba(0, 0, 0, 0.4);
+            /* semi-transparent black bg */
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            display: inline-block;
+            /* shrink to fit content */
+        }
     </style>
-    
+
 
     <div class="chat-container">
         <form id="upload-form" enctype="multipart/form-data" style="margin-bottom: 20px;">
@@ -92,23 +99,29 @@
                 const input = inputField.value.trim();
                 if (!input) return;
                 inputField.disabled = true;
-                fetch('/chat', {
+                fetch('/ai-agent/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ input: input })
                 })
-                .then(response => response.json())
-                .then(data => {
-                    const chatBox = document.getElementById("chat-box");
-                    chatBox.innerText += "You: " + input + "\nAssistant: " + data.response + "\n\n";
-                    inputField.value = "";
-                    inputField.disabled = false;
-                    chatBox.scrollTop = chatBox.scrollHeight;
-                })
-                .catch(error => console.error('Error:', error));
+                    .then(response => response.json())
+                    .then(data => {
+                        const chatBox = document.getElementById("chat-box");
+                        // Debug: print raw response to console
+                        console.log('Raw assistant response:', data.response);
+                        let responseText = data.response;
+                        if (typeof responseText === 'string' && responseText.trim().toLowerCase().startsWith('sorry, i couldn')) {
+                            responseText = '[Web search error: Tavily or LangChain could not get a response. Check API key, quota, or internet access.]';
+                        }
+                        chatBox.innerText += "You: " + input + "\nAssistant: " + responseText + "\n\n";
+                        inputField.value = "";
+                        inputField.disabled = false;
+                        chatBox.scrollTop = chatBox.scrollHeight;
+                    })
+                    .catch(error => console.error('Error:', error));
             }
 
-            document.getElementById("input").addEventListener("keydown", function(event) {
+            document.getElementById("input").addEventListener("keydown", function (event) {
                 if (event.key === "Enter") {
                     event.preventDefault();
                     sendMessage();
@@ -116,27 +129,28 @@
             });
 
             // Upload logic
-            document.getElementById("upload-form").addEventListener("submit", function(event) {
+            document.getElementById("upload-form").addEventListener("submit", function (event) {
                 event.preventDefault();
                 const fileInput = document.getElementById("file-upload");
                 const status = document.getElementById("upload-status");
                 const formData = new FormData();
                 formData.append("file", fileInput.files[0]);
                 status.textContent = "Uploading...";
-                fetch("/upload", {
+                fetch("/ai-agent/upload", {
                     method: "POST",
                     body: formData
                 })
-                .then(response => response.json())
-                .then(data => {
-                    status.textContent = data.success ? "Upload successful!" : "Upload failed.";
-                    fileInput.value = "";
-                })
-                .catch(() => {
-                    status.textContent = "Upload failed.";
-                });
+                    .then(response => response.json())
+                    .then(data => {
+                        status.textContent = data.success ? "Upload successful!" : "Upload failed.";
+                        fileInput.value = "";
+                    })
+                    .catch(() => {
+                        status.textContent = "Upload failed.";
+                    });
             });
         };
     </script>
 </body>
+
 </html>
