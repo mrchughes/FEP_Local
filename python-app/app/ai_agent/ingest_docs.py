@@ -1,7 +1,7 @@
 import os
 from langchain.document_loaders import DirectoryLoader, PyPDFLoader, Docx2txtLoader, TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import OllamaEmbeddings
+from langchain_openai import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
 from dotenv import load_dotenv
 
@@ -30,7 +30,10 @@ splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
 splits = splitter.split_documents(docs)
 
 # Embed and store
-embeddings = OllamaEmbeddings(model="phi3:mini", base_url="http://localhost:11434")
+openai_key = os.getenv("OPENAI_API_KEY")
+if not openai_key:
+    raise ValueError("OPENAI_API_KEY is not set in the environment.")
+embeddings = OpenAIEmbeddings(openai_api_key=openai_key)
 db = Chroma.from_documents(splits, embeddings, persist_directory=persist_dir)
 db.persist()
 print("Ingestion complete.")

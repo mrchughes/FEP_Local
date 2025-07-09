@@ -1,156 +1,216 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="en">
 <head>
-    <title>Chris' Chatbot</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Policy Chatbot & Document RAG | GOV.UK Prototype</title>
+    <link rel="stylesheet" href="https://assets.publishing.service.gov.uk/government-frontend/govuk-frontend-4.7.0.min.css">
     <style>
         body {
             background-image: url(/static/images/background.jpg);
             background-size: cover;
             background-repeat: no-repeat;
             background-attachment: fixed;
-            font-family: Arial, sans-serif;
-            color: #fff;
+            font-family: "GDS Transport", Arial, sans-serif;
             margin: 0;
             padding: 0;
+            min-height: 100vh;
+        }
+        .govuk-width-container {
+            background: rgba(255,255,255,0.97);
+            border-radius: 8px;
+            margin-top: 32px;
+            margin-bottom: 32px;
+            box-shadow: 0 4px 16px #0002;
+            padding: 32px 24px;
+        }
+        .govuk-heading-xl {
+            margin-bottom: 0.5em;
+        }
+        .rag-doc-list {
+            margin-bottom: 1em;
+        }
+        .rag-doc-list li {
             display: flex;
-            flex-direction: column;
             align-items: center;
-            justify-content: center;
-            height: 100vh;
+            justify-content: space-between;
+            padding: 0.25em 0;
         }
-
-        h1 {
-            font-size: 3em;
-            margin-bottom: 20px;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.6);
+        .progress-bar {
+            width: 100%;
+            background: #f3f2f1;
+            border-radius: 4px;
+            margin: 0.5em 0;
+            height: 1.5em;
+            overflow: hidden;
         }
-
-        .chat-container {
-            background-color: rgba(255, 255, 255, 0.9);
-            padding: 20px;
-            border-radius: 10px;
-            width: 95%;
-            max-width: 750px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        .progress-bar-inner {
+            height: 100%;
+            background: #1d70b8;
+            color: #fff;
+            text-align: center;
+            white-space: nowrap;
+            transition: width 0.3s;
         }
-
         #chat-box {
             white-space: pre-line;
-            border: 1px solid #ccc;
+            border: 1px solid #b1b4b6;
             padding: 10px;
-            height: 400px;
+            height: 320px;
             overflow-y: scroll;
             background-color: #f0f0f0;
-            color: darkblue;
+            color: #0b0c0c;
             margin-bottom: 10px;
         }
-
-        #input,
-        button {
-            padding: 10px;
-            font-size: 1em;
-        }
-
-        input[type="text"] {
-            width: 70%;
+        .govuk-button--danger {
+            background: #d4351c;
         }
     </style>
 </head>
 
-<body>
 
-    <h1 class="title">Chris' Chatbot</h1>
+<body class="govuk-template__body">
+<div class="govuk-width-container">
+    <h1 class="govuk-heading-xl">Policy Chatbot & Document Upload (RAG)</h1>
+    <p class="govuk-body-l">This tool allows DWP agents to upload policy documents (PDF, DOCX, TXT) to the chatbot's knowledge base (RAG), and to interact with the chatbot for policy queries. Uploaded documents are vectorised and used to improve answers. You can also remove documents from the knowledge base.</p>
 
-    <style>
-        .title {
-            font-size: 3rem;
-            font-weight: 700;
-            color: white;
-            /* bright text */
-            text-shadow: 2px 2px 6px rgba(0, 0, 0, 0.8);
-            /* dark shadow for contrast */
-            background-color: rgba(0, 0, 0, 0.4);
-            /* semi-transparent black bg */
-            padding: 0.5rem 1rem;
-            border-radius: 0.5rem;
-            display: inline-block;
-            /* shrink to fit content */
-        }
-    </style>
+    <form id="upload-form" enctype="multipart/form-data" class="govuk-form-group govuk-!-margin-bottom-6">
+        <label class="govuk-label govuk-label--m" for="file-upload">Upload a policy document</label>
+        <input class="govuk-file-upload" id="file-upload" type="file" name="file" accept=".pdf,.docx,.txt" required>
+        <button class="govuk-button govuk-!-margin-top-2" type="submit" id="upload-btn">Upload</button>
+        <span id="upload-status" class="govuk-body govuk-!-margin-left-2"></span>
+        <div id="progress-container" style="display:none;">
+            <div class="progress-bar"><div class="progress-bar-inner" id="progress-bar-inner" style="width:0%">0%</div></div>
+            <span id="progress-label" class="govuk-body-s"></span>
+        </div>
+    </form>
 
-
-    <div class="chat-container">
-        <form id="upload-form" enctype="multipart/form-data" style="margin-bottom: 20px;">
-            <label for="file-upload">Upload DWP Policy Document (PDF, DOCX, TXT): </label>
-            <input id="file-upload" type="file" name="file" accept=".pdf,.docx,.txt" required>
-            <button type="submit">Upload</button>
-            <span id="upload-status"></span>
-        </form>
-        <div id="chat-box"></div>
-        <input id="input" type="text" placeholder="Ask something..." autofocus>
+    <div class="govuk-form-group govuk-!-margin-bottom-6">
+        <label class="govuk-label govuk-label--m">Documents in RAG knowledge base</label>
+        <ul id="doc-list" class="govuk-list rag-doc-list"></ul>
     </div>
 
-    <script>
-        window.onload = function () {
-            // Chat logic
-            function sendMessage() {
-                const inputField = document.getElementById("input");
-                const input = inputField.value.trim();
-                if (!input) return;
-                inputField.disabled = true;
-                fetch('/ai-agent/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ input: input })
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        const chatBox = document.getElementById("chat-box");
-                        // Debug: print raw response to console
-                        console.log('Raw assistant response:', data.response);
-                        let responseText = data.response;
-                        if (typeof responseText === 'string' && responseText.trim().toLowerCase().startsWith('sorry, i couldn')) {
-                            responseText = '[Web search error: Tavily or LangChain could not get a response. Check API key, quota, or internet access.]';
-                        }
-                        chatBox.innerText += "You: " + input + "\nAssistant: " + responseText + "\n\n";
-                        inputField.value = "";
-                        inputField.disabled = false;
-                        chatBox.scrollTop = chatBox.scrollHeight;
-                    })
-                    .catch(error => console.error('Error:', error));
+    <div class="govuk-form-group">
+        <label class="govuk-label govuk-label--m" for="input">Chat with the policy assistant</label>
+        <div id="chat-box"></div>
+        <input class="govuk-input govuk-!-width-three-quarters" id="input" type="text" placeholder="Ask a policy question..." autocomplete="off" autofocus>
+    </div>
+</div>
+
+<script>
+function fetchDocs() {
+    fetch('/ai-agent/docs')
+        .then(res => res.json())
+        .then(data => {
+            const docList = document.getElementById('doc-list');
+            docList.innerHTML = '';
+            if (data.documents && data.documents.length > 0) {
+                data.documents.forEach(doc => {
+                    const li = document.createElement('li');
+                    li.textContent = doc;
+                    const btn = document.createElement('button');
+                    btn.className = 'govuk-button govuk-button--danger govuk-!-margin-left-2';
+                    btn.textContent = 'Remove';
+                    btn.onclick = function() { removeDoc(doc); };
+                    li.appendChild(btn);
+                    docList.appendChild(li);
+                });
+            } else {
+                docList.innerHTML = '<li class="govuk-body-s">No documents uploaded yet.</li>';
             }
+        });
+}
 
-            document.getElementById("input").addEventListener("keydown", function (event) {
-                if (event.key === "Enter") {
-                    event.preventDefault();
-                    sendMessage();
+function removeDoc(filename) {
+    if (!confirm('Are you sure you want to remove this document from RAG?')) return;
+    fetch('/ai-agent/docs/' + encodeURIComponent(filename), { method: 'DELETE' })
+        .then(res => res.json())
+        .then(data => {
+            fetchDocs();
+        });
+}
+
+function showProgress(percent, label) {
+    const container = document.getElementById('progress-container');
+    const bar = document.getElementById('progress-bar-inner');
+    const text = document.getElementById('progress-label');
+    container.style.display = 'block';
+    bar.style.width = percent + '%';
+    bar.textContent = percent + '%';
+    text.textContent = label;
+    if (percent >= 100) setTimeout(() => { container.style.display = 'none'; }, 1200);
+}
+
+window.onload = function () {
+    fetchDocs();
+
+    // Chat logic
+    function sendMessage() {
+        const inputField = document.getElementById("input");
+        const input = inputField.value.trim();
+        if (!input) return;
+        inputField.disabled = true;
+        fetch('/ai-agent/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ input: input })
+        })
+            .then(response => response.json())
+            .then(data => {
+                const chatBox = document.getElementById("chat-box");
+                let responseText = data.response;
+                if (typeof responseText === 'string' && responseText.trim().toLowerCase().startsWith('sorry, i couldn')) {
+                    responseText = '[Web search error: Tavily or LangChain could not get a response. Check API key, quota, or internet access.]';
                 }
-            });
+                chatBox.innerText += "You: " + input + "\nAssistant: " + responseText + "\n\n";
+                inputField.value = "";
+                inputField.disabled = false;
+                chatBox.scrollTop = chatBox.scrollHeight;
+            })
+            .catch(error => console.error('Error:', error));
+    }
+    document.getElementById("input").addEventListener("keydown", function (event) {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            sendMessage();
+        }
+    });
 
-            // Upload logic
-            document.getElementById("upload-form").addEventListener("submit", function (event) {
-                event.preventDefault();
-                const fileInput = document.getElementById("file-upload");
-                const status = document.getElementById("upload-status");
-                const formData = new FormData();
-                formData.append("file", fileInput.files[0]);
-                status.textContent = "Uploading...";
-                fetch("/ai-agent/upload", {
-                    method: "POST",
-                    body: formData
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        status.textContent = data.success ? "Upload successful!" : "Upload failed.";
+    // Upload logic with progress simulation
+    document.getElementById("upload-form").addEventListener("submit", function (event) {
+        event.preventDefault();
+        const fileInput = document.getElementById("file-upload");
+        const status = document.getElementById("upload-status");
+        const formData = new FormData();
+        formData.append("file", fileInput.files[0]);
+        status.textContent = "Uploading...";
+        showProgress(10, 'Uploading...');
+        fetch("/ai-agent/upload", {
+            method: "POST",
+            body: formData
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showProgress(60, 'Tokenising and vectorising...');
+                    setTimeout(() => {
+                        showProgress(100, 'Complete!');
+                        status.textContent = "Upload successful!";
                         fileInput.value = "";
-                    })
-                    .catch(() => {
-                        status.textContent = "Upload failed.";
-                    });
+                        fetchDocs();
+                    }, 1200);
+                } else {
+                    status.textContent = "Upload failed.";
+                    showProgress(0, '');
+                }
+            })
+            .catch(() => {
+                status.textContent = "Upload failed.";
+                showProgress(0, '');
             });
-        };
-    </script>
+    });
+};
+</script>
 </body>
 
 </html>

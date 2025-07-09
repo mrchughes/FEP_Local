@@ -1,3 +1,35 @@
+
+
+
+# --- New: List documents in RAG ---
+@ai_agent_bp.route('/docs', methods=['GET'])
+def list_docs():
+    docs_dir = app.config['UPLOAD_FOLDER']
+    files = []
+    for fname in os.listdir(docs_dir):
+        if fname.lower().endswith(('.pdf', '.docx', '.txt')):
+            files.append(fname)
+    return jsonify({'documents': files})
+
+# --- New: Remove a document from RAG ---
+@ai_agent_bp.route('/docs/<filename>', methods=['DELETE'])
+def delete_doc(filename):
+    docs_dir = app.config['UPLOAD_FOLDER']
+    file_path = os.path.join(docs_dir, filename)
+    if not os.path.exists(file_path):
+        return jsonify({'success': False, 'error': 'File not found'}), 404
+    try:
+        os.remove(file_path)
+        # Re-ingest all docs to update RAG DB
+        import subprocess
+        subprocess.run([
+            'python', os.path.join(os.path.dirname(__file__), 'ingest_docs.py')
+        ], check=True)
+        global rag_db
+        rag_db = Chroma(persist_directory=persist_dir, embedding_function=embeddings)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 # app_with_background.py
 
 from dotenv import load_dotenv
@@ -37,12 +69,39 @@ if os.path.exists(persist_dir):
         rag_db = Chroma(persist_directory=persist_dir, embedding_function=embeddings)
     except Exception:
         rag_db = None
+
 # 5. Flask route for the UI with background image
-
-
-
-from flask import Blueprint
+from flask import Blueprint, send_from_directory
 ai_agent_bp = Blueprint('ai_agent', __name__, url_prefix='/ai-agent')
+# --- List documents in RAG ---
+@ai_agent_bp.route('/docs', methods=['GET'])
+def list_docs():
+    docs_dir = app.config['UPLOAD_FOLDER']
+    files = []
+    for fname in os.listdir(docs_dir):
+        if fname.lower().endswith(('.pdf', '.docx', '.txt')):
+            files.append(fname)
+    return jsonify({'documents': files})
+
+# --- Remove a document from RAG ---
+@ai_agent_bp.route('/docs/<filename>', methods=['DELETE'])
+def delete_doc(filename):
+    docs_dir = app.config['UPLOAD_FOLDER']
+    file_path = os.path.join(docs_dir, filename)
+    if not os.path.exists(file_path):
+        return jsonify({'success': False, 'error': 'File not found'}), 404
+    try:
+        os.remove(file_path)
+        # Re-ingest all docs to update RAG DB
+        import subprocess
+        subprocess.run([
+            'python', os.path.join(os.path.dirname(__file__), 'ingest_docs.py')
+        ], check=True)
+        global rag_db
+        rag_db = Chroma(persist_directory=persist_dir, embedding_function=embeddings)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # Health check endpoint
 @ai_agent_bp.route('/health', methods=['GET'])
