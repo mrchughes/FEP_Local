@@ -11,7 +11,7 @@ const ConfirmationPage = () => {
             <main className="govuk-main-wrapper" id="main-content" role="main">
                 <div className="govuk-grid-row">
                     <div className="govuk-grid-column-two-thirds">
-                        
+
                         {downloadUrl ? (
                             <CompletedFormLink url={downloadUrl} />
                         ) : (
@@ -27,18 +27,18 @@ const ConfirmationPage = () => {
                         )}
 
                         <h2 className="govuk-heading-m">What happens next</h2>
-                        
+
                         <p className="govuk-body">
                             We've sent you a confirmation email.
                         </p>
-                        
+
                         <p className="govuk-body">
-                            Your application will be processed within 5 working days. 
+                            Your application will be processed within 5 working days.
                             You'll receive an email with further instructions.
                         </p>
 
                         <h2 className="govuk-heading-m">Help with your application</h2>
-                        
+
                         <p className="govuk-body">
                             If you need help with your application, you can{' '}
                             <a href="#" className="govuk-link">contact us</a>.

@@ -14,27 +14,27 @@ import "./styles/govuk-overrides.css";
 
 // Simple error boundary
 function ErrorBoundary({ children }) {
-  const [error, setError] = useState(null);
-  if (error) {
+    const [error, setError] = useState(null);
+    if (error) {
+        return (
+            <div style={{ padding: 40, color: 'red', background: '#fff3f3' }}>
+                <h1>Something went wrong</h1>
+                <pre>{error.toString()}</pre>
+            </div>
+        );
+    }
     return (
-      <div style={{ padding: 40, color: 'red', background: '#fff3f3' }}>
-        <h1>Something went wrong</h1>
-        <pre>{error.toString()}</pre>
-      </div>
+        <React.Fragment>
+            {React.Children.map(children, child => {
+                try {
+                    return child;
+                } catch (e) {
+                    setError(e);
+                    return null;
+                }
+            })}
+        </React.Fragment>
     );
-  }
-  return (
-    <React.Fragment>
-      {React.Children.map(children, child => {
-        try {
-          return child;
-        } catch (e) {
-          setError(e);
-          return null;
-        }
-      })}
-    </React.Fragment>
-  );
 }
 
 const App = () => {
@@ -43,9 +43,9 @@ const App = () => {
         <ErrorBoundary>
             <div className="govuk-template">
                 <a href="#main-content" className="govuk-skip-link">Skip to main content</a>
-                
+
                 <Navbar />
-                
+
                 <div className="govuk-width-container">
                     <main className="govuk-main-wrapper" id="main-content" role="main">
                         <Routes>

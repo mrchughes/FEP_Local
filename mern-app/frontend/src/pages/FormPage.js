@@ -2269,34 +2269,34 @@ const FormPage = () => {
                             </div>
                         </form>
 
-                    {/* Bottom links for navigation and sign out */}
-                    <div style={{ marginTop: 40 }}>
-                        <p className="govuk-body">
-                            <Link to="/dashboard" className="govuk-link">
-                                Return to dashboard
-                            </Link>
-                        </p>
-                        <p className="govuk-body">
-                            <button
-                                type="button"
-                                className="govuk-link"
-                                style={{ background: 'none', border: 'none', padding: 0, margin: 0, color: '#1d70b8', cursor: 'pointer' }}
-                                onClick={() => {
-                                    if (window.confirm('Are you sure you want to sign out? Unsaved changes may be lost.')) {
-                                        window.localStorage.removeItem('user');
-                                        window.location.href = '/';
-                                    }
-                                }}
-                            >
-                                Sign out
-                            </button>
-                        </p>
-                    </div>
-                    <ChatbotWidget />
-                </div> {/* end govuk-grid-column-two-thirds */}
-            </div> {/* end govuk-grid-row */}
-        </main>
-    </div>
+                        {/* Bottom links for navigation and sign out */}
+                        <div style={{ marginTop: 40 }}>
+                            <p className="govuk-body">
+                                <Link to="/dashboard" className="govuk-link">
+                                    Return to dashboard
+                                </Link>
+                            </p>
+                            <p className="govuk-body">
+                                <button
+                                    type="button"
+                                    className="govuk-link"
+                                    style={{ background: 'none', border: 'none', padding: 0, margin: 0, color: '#1d70b8', cursor: 'pointer' }}
+                                    onClick={() => {
+                                        if (window.confirm('Are you sure you want to sign out? Unsaved changes may be lost.')) {
+                                            window.localStorage.removeItem('user');
+                                            window.location.href = '/';
+                                        }
+                                    }}
+                                >
+                                    Sign out
+                                </button>
+                            </p>
+                        </div>
+                        <ChatbotWidget />
+                    </div> {/* end govuk-grid-column-two-thirds */}
+                </div> {/* end govuk-grid-row */}
+            </main>
+        </div>
     );
 };
 

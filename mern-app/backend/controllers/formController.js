@@ -21,7 +21,7 @@ const submitForm = asyncHandler(async (req, res) => {
 
     if (isAutoSave) {
         // For auto-save, just return success
-        res.json({ 
+        res.json({
             message: "Form auto-saved successfully",
             savedAt: new Date().toISOString()
         });

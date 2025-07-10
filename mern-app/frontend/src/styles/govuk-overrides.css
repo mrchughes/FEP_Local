@@ -5,10 +5,12 @@
     align-items: center;
     margin-top: 40px;
 }
+
 .dashboard-bottom-links .govuk-link {
     font-weight: 400;
     font-size: 19px;
 }
+
 .dashboard-signout-link {
     margin-left: auto;
     color: #1d70b8;
@@ -16,23 +18,28 @@
     font-weight: 400;
     font-size: 19px;
 }
+
 /* GOV.UK black header bar for .service-header */
 .service-header {
     background: #0b0c0c !important;
     color: #fff !important;
     border-bottom: 10px solid #1d70b8;
 }
+
 .service-header .govuk-header__container {
     border-bottom: none !important;
 }
+
 .service-header .govuk-header__logo a,
 .service-header .govuk-header__logotype-text,
 .service-header .govuk-header__service-name {
     color: #fff !important;
 }
+
 .service-header .govuk-header__logotype-crown {
     fill: #fff !important;
 }
+
 /* Header navigation alignment fix for summary and sign out */
 .govuk-header__navigation-list {
     align-items: flex-start !important;
@@ -43,6 +50,7 @@
 .govuk-header__navigation-item {
     align-self: flex-start !important;
 }
+
 /* Header link for summary page - GOV.UK style adjustments */
 .govuk-header__link--summary {
     font-size: 19px;

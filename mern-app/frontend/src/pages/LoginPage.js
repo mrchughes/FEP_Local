@@ -55,8 +55,8 @@ const LoginPage = () => {
                 setErrors({ general: "Login failed: No token received." });
             }
         } catch (err) {
-            setErrors({ 
-                general: err.message || "Enter a correct email address and password" 
+            setErrors({
+                general: err.message || "Enter a correct email address and password"
             });
             // Also clear user state on error
             if (typeof loginUser === "function") {
@@ -117,15 +117,15 @@ const LoginPage = () => {
                                         <span className="govuk-visually-hidden">Error:</span> {errors.email}
                                     </p>
                                 )}
-                                <input 
+                                <input
                                     className={`govuk-input ${errors.email ? 'govuk-input--error' : ''}`}
                                     id="email"
-                                    name="email" 
+                                    name="email"
                                     type="email"
                                     autoComplete="email"
                                     spellCheck="false"
-                                    value={formData.email} 
-                                    onChange={handleChange} 
+                                    value={formData.email}
+                                    onChange={handleChange}
                                     disabled={loading}
                                     aria-describedby={`email-hint ${errors.email ? 'email-error' : ''}`}
                                 />
@@ -139,21 +139,21 @@ const LoginPage = () => {
                                         <span className="govuk-visually-hidden">Error:</span> {errors.password}
                                     </p>
                                 )}
-                                <input 
+                                <input
                                     className={`govuk-input ${errors.password ? 'govuk-input--error' : ''}`}
                                     id="password"
-                                    name="password" 
+                                    name="password"
                                     type="password"
                                     autoComplete="current-password"
-                                    value={formData.password} 
-                                    onChange={handleChange} 
+                                    value={formData.password}
+                                    onChange={handleChange}
                                     disabled={loading}
                                     aria-describedby={errors.password ? 'password-error' : ''}
                                 />
                             </div>
-                            <button 
-                                className="govuk-button" 
-                                data-module="govuk-button" 
+                            <button
+                                className="govuk-button"
+                                data-module="govuk-button"
                                 disabled={loading}
                                 type="submit"
                             >
