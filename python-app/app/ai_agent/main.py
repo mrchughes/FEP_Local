@@ -1,5 +1,8 @@
 
 
+# --- Blueprint must be defined before use ---
+from flask import Blueprint
+ai_agent_bp = Blueprint('ai_agent', __name__, url_prefix='/ai-agent')
 
 # --- New: List documents in RAG ---
 @ai_agent_bp.route('/docs', methods=['GET'])
@@ -30,7 +33,6 @@ def delete_doc(filename):
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
-# app_with_background.py
 
 from dotenv import load_dotenv
 import os

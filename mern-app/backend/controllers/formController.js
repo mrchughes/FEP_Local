@@ -44,7 +44,8 @@ const getResumeData = asyncHandler(async (req, res) => {
         throw new Error("No saved form data found");
     }
 
-    res.json(data);
+    // Wrap in { formData: ... } for frontend compatibility
+    res.json({ formData: data });
 });
 
 module.exports = { submitForm, getResumeData };

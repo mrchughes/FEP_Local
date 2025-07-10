@@ -72,4 +72,27 @@ const loginUser = asyncHandler(async (req, res) => {
     });
 });
 
-module.exports = { registerUser, loginUser };
+// Simple password reset: user provides email and new password
+const resetPassword = asyncHandler(async (req, res) => {
+    const { email, newPassword } = req.body;
+    if (!email || !newPassword) {
+        res.status(400);
+        throw new Error("Please provide email and new password");
+    }
+    if (newPassword.length < 8) {
+        res.status(400);
+        throw new Error("Password must be at least 8 characters long");
+    }
+    const user = await findUserByEmail(email.toLowerCase());
+    if (!user) {
+        res.status(404);
+        throw new Error("No user found with that email");
+    }
+    const salt = await bcrypt.genSalt(12);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+    user.password = hashedPassword;
+    await user.save();
+    res.json({ message: "Password reset successful" });
+});
+
+module.exports = { registerUser, loginUser, resetPassword };
