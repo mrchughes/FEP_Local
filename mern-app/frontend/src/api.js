@@ -1,3 +1,12 @@
+// Password reset endpoint
+export const resetPassword = async ({ email, newPassword }) => {
+    try {
+        const res = await api.post('/auth/reset-password', { email, newPassword });
+        return res.data;
+    } catch (error) {
+        throw new Error(error.response?.data?.message || 'Password reset failed');
+    }
+};
 // Fully implemented real code for frontend/src/api.js
 import axios from "axios";
 

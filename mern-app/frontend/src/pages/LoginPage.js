@@ -19,17 +19,14 @@ const LoginPage = () => {
 
     const validateForm = () => {
         const newErrors = {};
-        
         if (!formData.email) {
             newErrors.email = "Enter your email address";
         } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
             newErrors.email = "Enter an email address in the correct format, like name@example.com";
         }
-        
         if (!formData.password) {
             newErrors.password = "Enter your password";
         }
-        
         return newErrors;
     };
 
@@ -37,6 +34,10 @@ const LoginPage = () => {
         e.preventDefault();
         setErrors({});
         setLoading(true);
+        // Explicitly clear any previous user state on new login attempt
+        if (typeof loginUser === "function") {
+            loginUser(null); // Reset user state before new login
+        }
 
         // Validation
         const validationErrors = validateForm();
@@ -48,11 +49,19 @@ const LoginPage = () => {
 
         try {
             const data = await login(formData);
-            loginUser(data);
+            if (data && data.token) {
+                loginUser(data);
+            } else {
+                setErrors({ general: "Login failed: No token received." });
+            }
         } catch (err) {
             setErrors({ 
                 general: err.message || "Enter a correct email address and password" 
             });
+            // Also clear user state on error
+            if (typeof loginUser === "function") {
+                loginUser(null);
+            }
         } finally {
             setLoading(false);
         }
@@ -66,11 +75,9 @@ const LoginPage = () => {
                 <div className="govuk-grid-row">
                     <div className="govuk-grid-column-two-thirds">
                         <h1 className="govuk-heading-xl">Sign in</h1>
-                        
                         <p className="govuk-body-l">
                             Sign in to your secure account to apply for funeral expenses payment or check your existing applications.
                         </p>
-                        
                         {hasErrors && (
                             <div className="govuk-error-summary" aria-labelledby="error-summary-title" role="alert" data-module="govuk-error-summary">
                                 <h2 className="govuk-error-summary__title" id="error-summary-title">
@@ -97,7 +104,6 @@ const LoginPage = () => {
                                 </div>
                             </div>
                         )}
-
                         <form onSubmit={handleSubmit} noValidate>
                             <div className={`govuk-form-group ${errors.email ? 'govuk-form-group--error' : ''}`}>
                                 <label className="govuk-label govuk-label--m" htmlFor="email">
@@ -124,7 +130,6 @@ const LoginPage = () => {
                                     aria-describedby={`email-hint ${errors.email ? 'email-error' : ''}`}
                                 />
                             </div>
-                            
                             <div className={`govuk-form-group ${errors.password ? 'govuk-form-group--error' : ''}`}>
                                 <label className="govuk-label govuk-label--m" htmlFor="password">
                                     Password
@@ -146,7 +151,6 @@ const LoginPage = () => {
                                     aria-describedby={errors.password ? 'password-error' : ''}
                                 />
                             </div>
-                            
                             <button 
                                 className="govuk-button" 
                                 data-module="govuk-button" 
@@ -156,7 +160,9 @@ const LoginPage = () => {
                                 {loading ? "Signing in..." : "Sign in"}
                             </button>
                         </form>
-
+                        <p style={{ marginTop: 24 }}>
+                            <Link to="/reset-password" className="govuk-link">Forgot your password?</Link>
+                        </p>
                         <h2 className="govuk-heading-m">Don't have an account?</h2>
                         <p className="govuk-body">
                             You need to{" "}
@@ -165,22 +171,6 @@ const LoginPage = () => {
                             </Link>{" "}
                             before you can apply.
                         </p>
-                        
-                        <details className="govuk-details" data-module="govuk-details">
-                            <summary className="govuk-details__summary">
-                                <span className="govuk-details__summary-text">
-                                    Problems signing in?
-                                </span>
-                            </summary>
-                            <div className="govuk-details__text">
-                                <p className="govuk-body">If you've forgotten your password or are having trouble signing in:</p>
-                                <ul className="govuk-list govuk-list--bullet">
-                                    <li>check you've entered your email address correctly</li>
-                                    <li>check your password is correct</li>
-                                    <li>contact us if you continue to have problems</li>
-                                </ul>
-                            </div>
-                        </details>
                     </div>
                 </div>
             </main>

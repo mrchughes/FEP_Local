@@ -20,18 +20,15 @@ const DashboardPage = () => {
 
     useEffect(() => {
         const loadProgressFromDatabase = async () => {
-            if (!user?.token) {
-                console.log('🏠 DashboardPage: No user token, skipping data load');
+            if (!user || !user.token) {
+                console.log('🏠 DashboardPage: Waiting for user and token before loading data', user);
                 return;
             }
-
-            console.log('🏠 DashboardPage: Loading progress for user:', user.email);
-
+            console.log('🏠 DashboardPage: Loading progress for user:', user.email, 'with token:', user.token);
             try {
                 // Try to load from database first
                 const savedData = await getResumeData(user.token);
                 let formData = {};
-                
                 if (savedData && savedData.formData) {
                     formData = savedData.formData;
                     console.log('🏠 DashboardPage: Loaded data from database:', formData);
@@ -40,13 +37,10 @@ const DashboardPage = () => {
                     formData = loadFormData(user.email, {});
                     console.log('🏠 DashboardPage: Loaded data from localStorage:', formData);
                 }
-
                 // Load saved section progress to get accurate completion status
                 const savedSectionProgress = loadSectionProgress(user.email);
                 console.log('🏠 DashboardPage: Loaded saved section progress:', savedSectionProgress);
-
                 let progress, percentage;
-                
                 if (Object.keys(savedSectionProgress).length > 0) {
                     // Use saved progress for more accurate status
                     const completedSections = Object.values(savedSectionProgress).filter(status => status === STATUS.COMPLETED).length;
@@ -58,43 +52,14 @@ const DashboardPage = () => {
                     // Fallback to calculating from formData
                     progress = hasAnyProgress(formData);
                     percentage = getOverallProgress(formData);
-                    console.log('🏠 DashboardPage: Using calculated progress from formData');
+                    console.log('🏠 DashboardPage: Calculated progress from formData:', { progress, percentage });
                 }
-                
-                console.log('🏠 DashboardPage: Final progress calculation:', { 
-                    hasProgress: progress, 
-                    percentage: percentage,
-                    formDataKeys: Object.keys(formData)
-                });
-                
                 setHasProgress(progress);
                 setProgressPercentage(percentage);
             } catch (error) {
-                console.warn('🏠 DashboardPage: Failed to load from database, using localStorage:', error);
-                // Fallback to localStorage
-                const formData = loadFormData(user.email, {});
-                
-                // Load saved section progress for fallback too
-                const savedSectionProgress = loadSectionProgress(user.email);
-                let progress, percentage;
-                
-                if (Object.keys(savedSectionProgress).length > 0) {
-                    const completedSections = Object.values(savedSectionProgress).filter(status => status === STATUS.COMPLETED).length;
-                    const totalSections = Object.keys(FORM_SECTIONS).length;
-                    percentage = Math.round((completedSections / totalSections) * 100);
-                    progress = completedSections > 0 || hasAnyProgress(formData);
-                } else {
-                    progress = hasAnyProgress(formData);
-                    percentage = getOverallProgress(formData);
-                }
-                
-                console.log('🏠 DashboardPage: Fallback progress:', { progress, percentage });
-                
-                setHasProgress(progress);
-                setProgressPercentage(percentage);
+                console.error('🏠 DashboardPage: Error loading progress:', error);
             }
         };
-
         loadProgressFromDatabase();
     }, [user?.token, user?.email]);
 
@@ -217,10 +182,30 @@ const DashboardPage = () => {
                                 </p>
                             </div>
                         </details>
+                    {/* Bottom links for navigation and sign out */}
+                    <div className="dashboard-bottom-links">
+                        <Link to="/dashboard" className="govuk-link govuk-!-margin-right-4">
+                            Return to dashboard
+                        </Link>
+                        <a
+                            href="/"
+                            className="govuk-link dashboard-signout-link"
+                            style={{ marginLeft: 'auto' }}
+                            onClick={e => {
+                                e.preventDefault();
+                                if (window.confirm('Are you sure you want to sign out? Unsaved changes may be lost.')) {
+                                    window.localStorage.removeItem('user');
+                                    window.location.href = '/';
+                                }
+                            }}
+                        >
+                            Sign out
+                        </a>
                     </div>
                 </div>
-            </main>
-        </div>
+            </div>
+        </main>
+    </div>
     );
 };
 

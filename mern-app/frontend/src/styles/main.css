@@ -94,6 +94,18 @@ body {
 
 .service-header .govuk-header__container {
   border-bottom: none;
+  display: flex;
+  align-items: center;
+}
+
+/* Make the black header 50% taller */
+.service-header {
+  background-color: #0b0c0c;
+  border-bottom: 10px solid #1d70b8;
+  min-height: 120px;
+  height: 120px;
+  display: flex;
+  align-items: center;
 }
 
 .service-header .govuk-header__logo {
