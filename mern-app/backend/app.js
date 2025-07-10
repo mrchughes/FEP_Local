@@ -4,6 +4,8 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const authRoutes = require("./routes/authRoutes");
 const formRoutes = require("./routes/formRoutes");
+const evidenceRoutes = require("./routes/evidenceRoutes");
+const aiAgentRoutes = require("./routes/aiAgentRoutes");
 
 dotenv.config();
 
@@ -22,6 +24,11 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/forms", formRoutes);
+app.use("/api/evidence", evidenceRoutes);
+app.use("/api/ai-agent", aiAgentRoutes);
+// Serve uploaded evidence files statically
+const path = require("path");
+app.use("/uploads/evidence", express.static(path.join(__dirname, "../uploads/evidence")));
 
 app.get("/", (req, res) => {
     res.send("API is running...");

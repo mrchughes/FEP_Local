@@ -1,4 +1,6 @@
+import { getAISuggestions } from "../api/aiAgent";
 import React, { useState, useContext, useEffect } from "react";
+import { validatePostcode, validateNINO, validatePhoneNumber, validateEmail } from "../utils/validation";
 import { useNavigate, useSearchParams, Link, useLocation } from "react-router-dom";
 import AuthContext from "../auth/AuthContext";
 import { saveFormData, loadFormData, saveFormStep, loadFormStep, clearFormData } from "../utils/formPersistence";
@@ -11,12 +13,46 @@ import {
     clearSectionProgress
 } from "../utils/formProgress";
 import ChatbotWidget from "../components/ChatbotWidget";
+import EvidenceUpload from "../components/EvidenceUpload";
+import { uploadEvidenceFile, deleteEvidenceFile } from "../api/evidence";
 
 const FormPage = () => {
+    // AI suggestions state
+    const [aiSuggestions, setAISuggestions] = useState("");
+    const [aiLoading, setAILoading] = useState(false);
+    const [aiError, setAIError] = useState("");
     const { user } = useContext(AuthContext);
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const location = useLocation();
+    // For evidence upload
+    const [uploadedEvidence, setUploadedEvidence] = useState([]); // [{name, url}]
+    const [evidenceUploading, setEvidenceUploading] = useState(false);
+    const [evidenceError, setEvidenceError] = useState("");
+    // Handler for evidence upload
+    const handleEvidenceUpload = (files) => {
+        setEvidenceError("");
+        setEvidenceUploading(true);
+        const uploadAll = Array.from(files).map(async (file) => {
+            try {
+                const res = await uploadEvidenceFile(file, user?.token);
+                setUploadedEvidence(prev => [...prev, { name: res.name, url: res.url }]);
+            } catch (err) {
+                setEvidenceError(`Failed to upload ${file.name}`);
+            }
+        });
+        Promise.all(uploadAll).finally(() => setEvidenceUploading(false));
+    };
+
+    // Handler for evidence delete
+    const handleEvidenceDelete = (filename) => {
+        setEvidenceError("");
+        setEvidenceUploading(true);
+        deleteEvidenceFile(filename, user?.token)
+            .then(() => setUploadedEvidence(prev => prev.filter(f => f.name !== filename)))
+            .catch(() => setEvidenceError(`Failed to delete ${filename}`))
+            .finally(() => setEvidenceUploading(false));
+    };
 
     // Default form data structure
     const defaultFormData = {
@@ -25,7 +61,10 @@ const FormPage = () => {
         lastName: "",
         dateOfBirth: "",
         nationalInsuranceNumber: "",
-        address: "",
+        addressLine1: "",
+        addressLine2: "",
+        town: "",
+        county: "",
         postcode: "",
         phoneNumber: "",
         email: "",
@@ -63,7 +102,10 @@ const FormPage = () => {
         relationshipToDeceased: "",
 
         // Address of the person who died
-        deceasedAddress: "",
+        deceasedAddressLine1: "",
+        deceasedAddressLine2: "",
+        deceasedTown: "",
+        deceasedCounty: "",
         deceasedPostcode: "",
         deceasedUsualAddress: "",
 
@@ -150,6 +192,17 @@ const FormPage = () => {
 
     // Load data from database on component mount
     useEffect(() => {
+    // On first entry to evidence step, fetch AI suggestions if evidence exists and not already fetched
+    useEffect(() => {
+        if (currentStep === 12 && uploadedEvidence.length > 0 && !aiSuggestions && !aiLoading) {
+            setAILoading(true);
+            setAIError("");
+            getAISuggestions(formData, user?.token)
+                .then(res => setAISuggestions(res.suggestions))
+                .catch(() => setAIError("Could not fetch AI suggestions"))
+                .finally(() => setAILoading(false));
+        }
+    }, [currentStep, uploadedEvidence, aiSuggestions, aiLoading, formData, user?.token]);
         const loadFormDataFromDatabase = async () => {
             if (!user?.token) {
                 setIsLoadingData(false);
@@ -308,13 +361,18 @@ const FormPage = () => {
             if (!formData.lastName) stepErrors.lastName = "Enter your last name";
             if (!formData.dateOfBirth) stepErrors.dateOfBirth = "Enter your date of birth";
             if (!formData.nationalInsuranceNumber) stepErrors.nationalInsuranceNumber = "Enter your National Insurance number";
+            else if (!validateNINO(formData.nationalInsuranceNumber)) stepErrors.nationalInsuranceNumber = "Enter a valid National Insurance number";
         }
 
         if (step === 2) {
-            if (!formData.address) stepErrors.address = "Enter your address";
+            if (!formData.addressLine1) stepErrors.addressLine1 = "Enter your address line 1";
+            if (!formData.town) stepErrors.town = "Enter your town or city";
             if (!formData.postcode) stepErrors.postcode = "Enter your postcode";
+            else if (!validatePostcode(formData.postcode)) stepErrors.postcode = "Enter a valid UK postcode";
             if (!formData.phoneNumber) stepErrors.phoneNumber = "Enter your phone number";
+            else if (!validatePhoneNumber(formData.phoneNumber)) stepErrors.phoneNumber = "Enter a valid phone number";
             if (!formData.email) stepErrors.email = "Enter your email address";
+            else if (!validateEmail(formData.email)) stepErrors.email = "Enter a valid email address";
         }
 
         if (step === 3) {
@@ -360,8 +418,10 @@ const FormPage = () => {
         }
 
         if (step === 7) {
-            if (!formData.deceasedAddress) stepErrors.deceasedAddress = "Enter the deceased person's address";
+            if (!formData.deceasedAddressLine1) stepErrors.deceasedAddressLine1 = "Enter the deceased person's address line 1";
+            if (!formData.deceasedTown) stepErrors.deceasedTown = "Enter the deceased person's town or city";
             if (!formData.deceasedPostcode) stepErrors.deceasedPostcode = "Enter the deceased person's postcode";
+            else if (!validatePostcode(formData.deceasedPostcode)) stepErrors.deceasedPostcode = "Enter a valid UK postcode";
         }
 
         if (step === 8) {
@@ -578,21 +638,62 @@ const FormPage = () => {
             <h2 className="govuk-heading-l">Your contact details</h2>
             <p className="govuk-body">We need your address and contact information.</p>
 
-            <div className={`govuk-form-group ${errors.address ? 'govuk-form-group--error' : ''}`}>
-                <label className="govuk-label" htmlFor="address">Address</label>
-                {errors.address && (
+            <div className={`govuk-form-group ${errors.addressLine1 ? 'govuk-form-group--error' : ''}`}>
+                <label className="govuk-label" htmlFor="addressLine1">Address line 1</label>
+                {errors.addressLine1 && (
                     <p className="govuk-error-message">
-                        <span className="govuk-visually-hidden">Error:</span> {errors.address}
+                        <span className="govuk-visually-hidden">Error:</span> {errors.addressLine1}
                     </p>
                 )}
-                <textarea
-                    className={`govuk-textarea ${errors.address ? 'govuk-textarea--error' : ''}`}
-                    id="address"
-                    name="address"
-                    rows="3"
-                    value={formData.address}
+                <input
+                    className={`govuk-input ${errors.addressLine1 ? 'govuk-input--error' : ''}`}
+                    id="addressLine1"
+                    name="addressLine1"
+                    type="text"
+                    value={formData.addressLine1}
                     onChange={handleChange}
-                    autoComplete="street-address"
+                    autoComplete="address-line1"
+                />
+            </div>
+            <div className="govuk-form-group">
+                <label className="govuk-label" htmlFor="addressLine2">Address line 2 (optional)</label>
+                <input
+                    className="govuk-input"
+                    id="addressLine2"
+                    name="addressLine2"
+                    type="text"
+                    value={formData.addressLine2}
+                    onChange={handleChange}
+                    autoComplete="address-line2"
+                />
+            </div>
+            <div className={`govuk-form-group ${errors.town ? 'govuk-form-group--error' : ''}`}> 
+                <label className="govuk-label" htmlFor="town">Town or city</label>
+                {errors.town && (
+                    <p className="govuk-error-message">
+                        <span className="govuk-visually-hidden">Error:</span> {errors.town}
+                    </p>
+                )}
+                <input
+                    className={`govuk-input ${errors.town ? 'govuk-input--error' : ''}`}
+                    id="town"
+                    name="town"
+                    type="text"
+                    value={formData.town}
+                    onChange={handleChange}
+                    autoComplete="address-level2"
+                />
+            </div>
+            <div className="govuk-form-group">
+                <label className="govuk-label" htmlFor="county">County (optional)</label>
+                <input
+                    className="govuk-input"
+                    id="county"
+                    name="county"
+                    type="text"
+                    value={formData.county}
+                    onChange={handleChange}
+                    autoComplete="address-level1"
                 />
             </div>
 
@@ -1368,21 +1469,57 @@ const FormPage = () => {
             <h2 className="govuk-heading-l">Address of the person who died</h2>
             <p className="govuk-body">Enter the address where the person who died was living.</p>
 
-            <div className={`govuk-form-group ${errors.deceasedAddress ? 'govuk-form-group--error' : ''}`}>
-                <label className="govuk-label" htmlFor="deceasedAddress">
-                    Address
-                </label>
-                {errors.deceasedAddress && (
+            <div className={`govuk-form-group ${errors.deceasedAddressLine1 ? 'govuk-form-group--error' : ''}`}>
+                <label className="govuk-label" htmlFor="deceasedAddressLine1">Address line 1</label>
+                {errors.deceasedAddressLine1 && (
                     <p className="govuk-error-message">
-                        <span className="govuk-visually-hidden">Error:</span> {errors.deceasedAddress}
+                        <span className="govuk-visually-hidden">Error:</span> {errors.deceasedAddressLine1}
                     </p>
                 )}
-                <textarea
-                    className={`govuk-textarea ${errors.deceasedAddress ? 'govuk-textarea--error' : ''}`}
-                    id="deceasedAddress"
-                    name="deceasedAddress"
-                    rows="3"
-                    value={formData.deceasedAddress}
+                <input
+                    className={`govuk-input ${errors.deceasedAddressLine1 ? 'govuk-input--error' : ''}`}
+                    id="deceasedAddressLine1"
+                    name="deceasedAddressLine1"
+                    type="text"
+                    value={formData.deceasedAddressLine1}
+                    onChange={handleChange}
+                />
+            </div>
+            <div className="govuk-form-group">
+                <label className="govuk-label" htmlFor="deceasedAddressLine2">Address line 2 (optional)</label>
+                <input
+                    className="govuk-input"
+                    id="deceasedAddressLine2"
+                    name="deceasedAddressLine2"
+                    type="text"
+                    value={formData.deceasedAddressLine2}
+                    onChange={handleChange}
+                />
+            </div>
+            <div className={`govuk-form-group ${errors.deceasedTown ? 'govuk-form-group--error' : ''}`}> 
+                <label className="govuk-label" htmlFor="deceasedTown">Town or city</label>
+                {errors.deceasedTown && (
+                    <p className="govuk-error-message">
+                        <span className="govuk-visually-hidden">Error:</span> {errors.deceasedTown}
+                    </p>
+                )}
+                <input
+                    className={`govuk-input ${errors.deceasedTown ? 'govuk-input--error' : ''}`}
+                    id="deceasedTown"
+                    name="deceasedTown"
+                    type="text"
+                    value={formData.deceasedTown}
+                    onChange={handleChange}
+                />
+            </div>
+            <div className="govuk-form-group">
+                <label className="govuk-label" htmlFor="deceasedCounty">County (optional)</label>
+                <input
+                    className="govuk-input"
+                    id="deceasedCounty"
+                    name="deceasedCounty"
+                    type="text"
+                    value={formData.deceasedCounty}
                     onChange={handleChange}
                 />
             </div>
@@ -2109,8 +2246,24 @@ const FormPage = () => {
                 </fieldset>
             </div>
 
+            <EvidenceUpload
+                onUpload={handleEvidenceUpload}
+                onDelete={handleEvidenceDelete}
+                evidenceList={uploadedEvidence}
+            />
+            {evidenceUploading && <p className="govuk-body">Uploading...</p>}
+            {evidenceError && <p className="govuk-error-message">{evidenceError}</p>}
+            {aiLoading && <p className="govuk-body">Getting AI suggestions...</p>}
+            {aiError && <p className="govuk-error-message">{aiError}</p>}
+            {aiSuggestions && (
+                <div className="govuk-inset-text govuk-inset-text--suggested" style={{ borderLeft: '5px solid #ffbf47', background: '#fffbe6' }}>
+                    <strong>Suggested by AI:</strong>
+                    <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#6f777b' }}>suggested: {aiSuggestions}</pre>
+                    <p className="govuk-hint">You can edit or overwrite these suggestions.</p>
+                </div>
+            )}
             <div className="govuk-inset-text">
-                <p className="govuk-body">You can upload your documents after submitting this application.</p>
+                <p className="govuk-body">You can upload your documents now or after submitting this application.</p>
             </div>
         </>
     );

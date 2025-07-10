@@ -14,7 +14,10 @@ export const formSections = [
     id: 'contact-details',
     title: 'Your contact details',
     fields: [
-      { name: 'address', label: 'Address', type: 'textarea', required: true },
+      { name: 'addressLine1', label: 'Address line 1', type: 'text', required: true },
+      { name: 'addressLine2', label: 'Address line 2', type: 'text', required: false },
+      { name: 'town', label: 'Town or city', type: 'text', required: true },
+      { name: 'county', label: 'County', type: 'text', required: false },
       { name: 'postcode', label: 'Postcode', type: 'text', required: true },
       { name: 'phoneNumber', label: 'Phone number', type: 'tel', required: true },
       { name: 'email', label: 'Email address', type: 'email', required: true }
@@ -164,7 +167,10 @@ export const formSections = [
     id: 'deceased-address',
     title: 'Address of the person who died',
     fields: [
-      { name: 'deceasedAddress', label: 'Address', type: 'textarea', required: true },
+      { name: 'deceasedAddressLine1', label: 'Address line 1', type: 'text', required: true },
+      { name: 'deceasedAddressLine2', label: 'Address line 2', type: 'text', required: false },
+      { name: 'deceasedTown', label: 'Town or city', type: 'text', required: true },
+      { name: 'deceasedCounty', label: 'County', type: 'text', required: false },
       { name: 'deceasedPostcode', label: 'Postcode', type: 'text', required: true },
       { name: 'deceasedUsualAddress', label: 'Was this their usual address?', type: 'radio', options: ['Yes', 'No'], required: false }
     ]
