@@ -12,12 +12,14 @@ const EvidenceUpload = ({ onUpload, onDelete, evidenceList }) => {
   const fileInputRef = useRef();
 
   const handleFileChange = (e) => {
+    console.log('[EVIDENCE COMPONENT] handleFileChange fired, files:', e.target.files);
     if (e.target.files && e.target.files.length > 0) {
       onUpload(e.target.files);
       fileInputRef.current.value = "";
     }
   };
 
+  console.log('[EVIDENCE COMPONENT] EvidenceUpload rendered, evidenceList:', evidenceList);
   return (
     <div className="evidence-upload govuk-form-group">
       <label className="govuk-label" htmlFor="evidence-upload">Upload evidence documents</label>

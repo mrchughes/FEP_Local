@@ -77,11 +77,15 @@ export const submitForm = async (formData, token) => {
 };
 
 // Auto-save form data as in-progress (not final submission)
-export const autoSaveForm = async (formData) => {
+export const autoSaveForm = async (formData, token) => {
     try {
         const res = await api.post('/forms/submit', {
             ...formData,
             isAutoSave: true
+        }, {
+            headers: token ? {
+                Authorization: `Bearer ${token}`,
+            } : undefined,
         });
         return res.data;
     } catch (error) {

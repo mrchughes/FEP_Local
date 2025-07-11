@@ -5,12 +5,16 @@ services:
       context: ./mern-app/backend
       dockerfile: Dockerfile
     ports:
-      - "5050:5050"
+      - "5200:5200"
     depends_on:
       - frontend
+      - ai-agent
     restart: unless-stopped
     networks:
       - app-network
+    volumes:
+      - ./mern-app/backend/uploads:/uploads
+      - ./shared-evidence:/shared-evidence
 
   frontend:
     build:
@@ -35,9 +39,9 @@ services:
     restart: unless-stopped
     networks:
       - app-network
-
     volumes:
       - ./python-app/app/ai_agent:/app/ai_agent
+      - ./shared-evidence:/shared-evidence
 
   chroma-db:
     image: chromadb/chroma

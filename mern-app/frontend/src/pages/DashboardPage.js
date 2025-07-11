@@ -7,9 +7,9 @@ import {
     hasAnyProgress,
     getOverallProgress,
     loadSectionProgress,
-    FORM_SECTIONS,
     STATUS
 } from "../utils/formProgress";
+import { formSections } from '../data/formStructure';
 
 const DashboardPage = () => {
     const { user } = useContext(AuthContext);
@@ -44,20 +44,25 @@ const DashboardPage = () => {
                 if (Object.keys(savedSectionProgress).length > 0) {
                     // Use saved progress for more accurate status
                     const completedSections = Object.values(savedSectionProgress).filter(status => status === STATUS.COMPLETED).length;
-                    const totalSections = Object.keys(FORM_SECTIONS).length;
+                    const totalSections = formSections.length;
                     percentage = Math.round((completedSections / totalSections) * 100);
-                    progress = completedSections > 0 || hasAnyProgress(formData);
+                    progress = completedSections > 0 || hasAnyProgress(formData, formSections);
                     console.log('🏠 DashboardPage: Using saved section progress:', { completedSections, totalSections, percentage });
                 } else {
                     // Fallback to calculating from formData
-                    progress = hasAnyProgress(formData);
-                    percentage = getOverallProgress(formData);
+                    progress = hasAnyProgress(formData, formSections);
+                    percentage = getOverallProgress(formData, formSections);
                     console.log('🏠 DashboardPage: Calculated progress from formData:', { progress, percentage });
                 }
                 setHasProgress(progress);
                 setProgressPercentage(percentage);
             } catch (error) {
                 console.error('🏠 DashboardPage: Error loading progress:', error);
+                // Handle 404 (no saved form data) gracefully
+                if (error.response && error.response.status === 404 && error.response.data && error.response.data.error === "No saved form data found") {
+                    setHasProgress(false);
+                    setProgressPercentage(0);
+                }
             }
         };
         loadProgressFromDatabase();

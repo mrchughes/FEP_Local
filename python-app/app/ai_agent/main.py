@@ -1,38 +1,5 @@
 
-
-# --- Blueprint must be defined before use ---
-from flask import Blueprint
-ai_agent_bp = Blueprint('ai_agent', __name__, url_prefix='/ai-agent')
-
-# --- New: List documents in RAG ---
-@ai_agent_bp.route('/docs', methods=['GET'])
-def list_docs():
-    docs_dir = app.config['UPLOAD_FOLDER']
-    files = []
-    for fname in os.listdir(docs_dir):
-        if fname.lower().endswith(('.pdf', '.docx', '.txt')):
-            files.append(fname)
-    return jsonify({'documents': files})
-
-# --- New: Remove a document from RAG ---
-@ai_agent_bp.route('/docs/<filename>', methods=['DELETE'])
-def delete_doc(filename):
-    docs_dir = app.config['UPLOAD_FOLDER']
-    file_path = os.path.join(docs_dir, filename)
-    if not os.path.exists(file_path):
-        return jsonify({'success': False, 'error': 'File not found'}), 404
-    try:
-        os.remove(file_path)
-        # Re-ingest all docs to update RAG DB
-        import subprocess
-        subprocess.run([
-            'python', os.path.join(os.path.dirname(__file__), 'ingest_docs.py')
-        ], check=True)
-        global rag_db
-        rag_db = Chroma(persist_directory=persist_dir, embedding_function=embeddings)
-        return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+# ...existing code...
 
 from dotenv import load_dotenv
 import os
@@ -57,8 +24,10 @@ import shutil
 app = Flask(__name__)
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
-app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'docs')
+# Use shared Docker volume for evidence
+app.config['UPLOAD_FOLDER'] = '/shared-evidence'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+logging.info(f"[CONFIG] AI agent evidence folder set to {app.config['UPLOAD_FOLDER']}")
 
 # RAG setup
 persist_dir = os.path.join(os.path.dirname(__file__), 'chroma_db')
@@ -73,8 +42,49 @@ if os.path.exists(persist_dir):
         rag_db = None
 
 # 5. Flask route for the UI with background image
+
 from flask import Blueprint, send_from_directory
+from docx import Document
+import PyPDF2
 ai_agent_bp = Blueprint('ai_agent', __name__, url_prefix='/ai-agent')
+
+@ai_agent_bp.route('/extract-form-data', methods=['POST'])
+def extract_form_data():
+    docs_dir = app.config['UPLOAD_FOLDER']
+    logging.info(f"[EXTRACT] Scanning evidence directory: {docs_dir}")
+    extracted = {}
+    for fname in os.listdir(docs_dir):
+        if fname.lower().endswith(('.pdf', '.docx', '.txt')):
+            file_path = os.path.join(docs_dir, fname)
+            logging.info(f"[EXTRACT] Processing file: {file_path}")
+            try:
+                if fname.lower().endswith('.txt'):
+                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
+                elif fname.lower().endswith('.docx'):
+                    doc = Document(file_path)
+                    content = '\n'.join([para.text for para in doc.paragraphs])
+                elif fname.lower().endswith('.pdf'):
+                    content = ""
+                    with open(file_path, 'rb') as f:
+                        reader = PyPDF2.PdfReader(f)
+                        for page in reader.pages:
+                            content += page.extract_text() or ""
+                else:
+                    content = f"File {fname} is not a supported type."
+                prompt = (
+                    "Extract relevant form fields and values from the following evidence:\n\n"
+                    + content +
+                    "\n\nReturn as a JSON object mapping field names to values."
+                )
+                response = llm.invoke(prompt)
+                extracted[fname] = str(response.content) if hasattr(response, 'content') else str(response)
+                logging.info(f"[EXTRACT] Extraction result for {fname}: {extracted[fname]}")
+            except Exception as e:
+                logging.error(f"[EXTRACT ERROR] {fname}: {e}")
+                extracted[fname] = f"Error extracting: {e}"
+    return jsonify(extracted)
+
 # --- List documents in RAG ---
 @ai_agent_bp.route('/docs', methods=['GET'])
 def list_docs():
@@ -355,7 +365,13 @@ def check_form():
             f"Use the following DWP policy context to check the form:\n{context}\n\n" + policy_prompt
         )
     response = llm.invoke(policy_prompt)
-    return jsonify({"response": response})
+    # Ensure the response is JSON serializable (convert to string if needed)
+    # If response is an object (e.g., AIMessage), convert to string
+    try:
+        response_str = str(response.content)
+    except AttributeError:
+        response_str = str(response)
+    return jsonify({"response": response_str})
 
 
 app.register_blueprint(ai_agent_bp)

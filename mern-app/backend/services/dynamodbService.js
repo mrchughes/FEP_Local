@@ -35,10 +35,22 @@ const findUserByEmail = async (email) => {
 
 const saveFormData = async (email, formData) => {
   try {
-    await User.updateOne(
+    console.log(`[DB SERVICE] Saving form data for ${email}, fields: ${Object.keys(formData).join(', ')}`);
+
+    const result = await User.updateOne(
       { email },
       { $set: { formData, updatedAt: new Date() } }
     );
+
+    console.log(`[DB SERVICE] Update result:`,
+      result.acknowledged ? 'Acknowledged' : 'Not acknowledged',
+      `Matched: ${result.matchedCount}`,
+      `Modified: ${result.modifiedCount}`
+    );
+
+    if (result.matchedCount === 0) {
+      console.warn(`[DB SERVICE] Warning: No user found with email ${email}`);
+    }
   } catch (error) {
     console.error("Error saving form data:", error);
     throw new Error("Failed to save form data");
@@ -47,7 +59,19 @@ const saveFormData = async (email, formData) => {
 
 const getFormData = async (email) => {
   try {
+    console.log(`[DB SERVICE] Getting form data for ${email}`);
     const user = await User.findOne({ email });
+
+    if (!user) {
+      console.warn(`[DB SERVICE] Warning: No user found with email ${email}`);
+      return null;
+    }
+
+    console.log(`[DB SERVICE] Found user ${email}, has formData: ${!!user.formData}`);
+    if (user.formData) {
+      console.log(`[DB SERVICE] Form data fields: ${Object.keys(user.formData).join(', ')}`);
+    }
+
     return user?.formData || null;
   } catch (error) {
     console.error("Error getting form data:", error);

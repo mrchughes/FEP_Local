@@ -1,8 +1,12 @@
 // Utility functions for evidence API
+
+// Use backend API URL directly for production and dev
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5200/api";
+
 export async function uploadEvidenceFile(file, token) {
   const formData = new FormData();
   formData.append("evidence", file);
-  const res = await fetch("/api/evidence/upload", {
+  const res = await fetch(`${API_URL}/evidence/upload`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: formData,
@@ -11,8 +15,9 @@ export async function uploadEvidenceFile(file, token) {
   return await res.json();
 }
 
+
 export async function deleteEvidenceFile(filename, token) {
-  const res = await fetch(`/api/evidence/${encodeURIComponent(filename)}`, {
+  const res = await fetch(`${API_URL}/evidence/${encodeURIComponent(filename)}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });

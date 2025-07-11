@@ -3,14 +3,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import AuthContext from '../auth/AuthContext';
 import { loadFormData } from '../utils/formPersistence';
 import { getResumeData } from '../api';
-import { 
-    FORM_SECTIONS, 
+import {
     STATUS,
     getAllSectionStatuses,
     getOverallProgress,
     hasAnyProgress,
     loadSectionProgress
 } from '../utils/formProgress';
+import { formSections } from '../data/formStructure';
 
 const TaskListPage = () => {
     const { user } = useContext(AuthContext);
@@ -30,7 +30,7 @@ const TaskListPage = () => {
                 // Load saved form data from database
                 const savedData = await getResumeData(user.token);
                 let formData = {};
-                
+
                 if (savedData && savedData.formData) {
                     formData = savedData.formData;
                 } else {
@@ -44,28 +44,24 @@ const TaskListPage = () => {
                 // This preserves completed sections even if formData is incomplete
                 const savedSectionProgress = loadSectionProgress(user.email);
                 console.log('📋 TaskListPage: Loaded saved section progress:', savedSectionProgress);
-                
+
                 let statuses;
                 if (Object.keys(savedSectionProgress).length > 0) {
-                    // Use saved progress if available
                     statuses = savedSectionProgress;
                     console.log('📋 TaskListPage: Using saved section progress');
                 } else {
-                    // Fallback to calculating from formData for new users
-                    statuses = getAllSectionStatuses(formData);
+                    statuses = getAllSectionStatuses(formData, formSections);
                     console.log('📋 TaskListPage: Calculating fresh section statuses');
                 }
-                
                 setSectionStatuses(statuses);
-
                 // Calculate overall progress from section statuses, not just formData
                 const completedSections = Object.values(statuses).filter(status => status === STATUS.COMPLETED).length;
-                const totalSections = Object.keys(FORM_SECTIONS).length;
+                const totalSections = formSections.length;
                 const progress = Math.round((completedSections / totalSections) * 100);
                 setOverallProgress(progress);
 
                 // If no progress, redirect to start of form
-                if (!hasAnyProgress(formData)) {
+                if (!hasAnyProgress(formData, formSections)) {
                     navigate('/form');
                 }
             } catch (error) {
@@ -80,16 +76,14 @@ const TaskListPage = () => {
                 if (Object.keys(savedSectionProgress).length > 0) {
                     statuses = savedSectionProgress;
                 } else {
-                    statuses = getAllSectionStatuses(formData);
+                    statuses = getAllSectionStatuses(formData, formSections);
                 }
                 setSectionStatuses(statuses);
-
                 const completedSections = Object.values(statuses).filter(status => status === STATUS.COMPLETED).length;
-                const totalSections = Object.keys(FORM_SECTIONS).length;
+                const totalSections = formSections.length;
                 const progress = Math.round((completedSections / totalSections) * 100);
                 setOverallProgress(progress);
-
-                if (!hasAnyProgress(formData)) {
+                if (!hasAnyProgress(formData, formSections)) {
                     navigate('/form');
                 }
             }
@@ -112,7 +106,7 @@ const TaskListPage = () => {
 
     const getStatusTag = (status) => {
         const baseClasses = 'govuk-tag govuk-task-list__tag';
-        
+
         switch (status) {
             case STATUS.COMPLETED:
                 return `${baseClasses} govuk-tag--green`;
@@ -145,7 +139,7 @@ const TaskListPage = () => {
                         <h1 className="govuk-heading-xl">
                             Apply for funeral expenses payment
                         </h1>
-                        
+
                         <p className="govuk-body-l">
                             Complete all sections to submit your application.
                         </p>
@@ -162,32 +156,21 @@ const TaskListPage = () => {
                         )}
 
                         <h2 className="govuk-heading-m">Application sections</h2>
-                        
+
                         <ol className="govuk-task-list">
-                            {Object.values(FORM_SECTIONS).map((section) => {
+                            {formSections.map((section, idx) => {
                                 const status = sectionStatuses[section.id] || STATUS.NOT_STARTED;
                                 const isCompleted = status === STATUS.COMPLETED;
-                                
                                 return (
                                     <li key={section.id} className="govuk-task-list__item govuk-task-list__item--with-link">
                                         <div className="govuk-task-list__name-and-hint">
-                                            {isCompleted ? (
-                                                <button
-                                                    className="govuk-link govuk-task-list__link"
-                                                    onClick={() => handleSectionClick(section)}
-                                                    style={{ background: 'none', border: 'none', padding: 0 }}
-                                                >
-                                                    {section.title}
-                                                </button>
-                                            ) : (
-                                                <button
-                                                    className="govuk-link govuk-task-list__link"
-                                                    onClick={() => handleSectionClick(section)}
-                                                    style={{ background: 'none', border: 'none', padding: 0 }}
-                                                >
-                                                    {section.title}
-                                                </button>
-                                            )}
+                                            <button
+                                                className="govuk-link govuk-task-list__link"
+                                                onClick={() => handleSectionClick({ ...section, step: idx + 1 })}
+                                                style={{ background: 'none', border: 'none', padding: 0 }}
+                                            >
+                                                {section.title}
+                                            </button>
                                         </div>
                                         <div className="govuk-task-list__status">
                                             <span className={getStatusTag(status)}>
@@ -200,13 +183,13 @@ const TaskListPage = () => {
                         </ol>
 
                         <h2 className="govuk-heading-m">Submit application</h2>
-                        
+
                         <ol className="govuk-task-list">
                             <li className="govuk-task-list__item govuk-task-list__item--with-link">
                                 <div className="govuk-task-list__name-and-hint">
                                     {canReview() ? (
-                                        <Link 
-                                            to="/review" 
+                                        <Link
+                                            to="/review"
                                             className="govuk-link govuk-task-list__link"
                                         >
                                             Review and submit application

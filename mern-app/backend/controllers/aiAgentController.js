@@ -5,11 +5,16 @@ const fs = require("fs");
 
 // Path to AI agent docs dir (adjust if needed)
 const AI_AGENT_DOCS = path.join(__dirname, "../../../python-app/app/ai_agent/docs");
-const EVIDENCE_UPLOADS = path.join(__dirname, "../../uploads/evidence");
+const EVIDENCE_UPLOADS = path.join(__dirname, "../uploads/evidence");
 
 // Copy new evidence files to AI agent docs dir
 function syncEvidenceToAIAgent() {
     if (!fs.existsSync(AI_AGENT_DOCS)) fs.mkdirSync(AI_AGENT_DOCS, { recursive: true });
+    if (!fs.existsSync(EVIDENCE_UPLOADS)) {
+        fs.mkdirSync(EVIDENCE_UPLOADS, { recursive: true });
+        return;
+    }
+
     const files = fs.readdirSync(EVIDENCE_UPLOADS);
     for (const file of files) {
         const src = path.join(EVIDENCE_UPLOADS, file);
@@ -27,13 +32,14 @@ async function getSuggestions(req, res) {
         syncEvidenceToAIAgent();
         // Optionally trigger re-ingest in AI agent (could call /ai-agent/ingest endpoint if exposed)
         // Call AI agent to get suggestions
-        const aiRes = await axios.post("http://localhost:5050/ai-agent/check-form", {
+        const aiRes = await axios.post("http://localhost:5100/ai-agent/check-form", {
             content: JSON.stringify(req.body.formData)
         });
         res.json({ suggestions: aiRes.data.response });
     } catch (err) {
+        console.error("AI suggestion error:", err.message);
         res.status(500).json({ error: err.message });
     }
 }
 
-module.exports = { getSuggestions };
+module.exports = { getSuggestions, syncEvidenceToAIAgent };

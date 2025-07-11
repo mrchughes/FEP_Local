@@ -154,7 +154,8 @@ const ReviewPage = () => {
         const questionsAndAnswers = Object.entries(formData)
             .map(([q, a]) => `${q}: ${Array.isArray(a) ? a.join(', ') : a}`)
             .join("\n");
-        const res = await fetch("/ai-agent/check-form", {
+        const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5200/api";
+        const res = await fetch(`${API_URL}/ai-agent/check-form`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ content: questionsAndAnswers })
