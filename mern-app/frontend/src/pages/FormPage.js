@@ -107,18 +107,28 @@ const FormPage = () => {
                 const result = await extractFormData(user?.token);
                 console.log('[EVIDENCE] AI extraction result:', result);
 
+                // Check if result has expected format
+                if (!result || !result.extracted) {
+                    console.error('[EVIDENCE] Invalid extraction result format:', result);
+                    setEvidenceError("AI extraction returned invalid data format");
+                    return;
+                }
+
                 // result.extracted is an object: { filename: extractedJsonString }
                 let merged = { ...formData };
                 let changedFields = [];
                 let extractedFieldInfo = {};
+                let extractedFieldNames = new Set();
                 Object.entries(result.extracted || {}).forEach(([filename, val]) => {
                     console.log(`[EVIDENCE] Processing extraction from ${filename}:`, val);
                     try {
                         let obj;
                         try {
-                            obj = JSON.parse(val);
+                            // Handle string vs object response
+                            obj = typeof val === 'string' ? JSON.parse(val) : val;
                         } catch (parseErr) {
                             console.error(`[EVIDENCE] Failed to parse JSON from ${filename}:`, parseErr);
+                            console.error(`[EVIDENCE] Raw value:`, val);
                             return;
                         }
                         Object.entries(obj).forEach(([k, v]) => {
@@ -136,6 +146,7 @@ const FormPage = () => {
                                 if (ciMatch) mappedKey = aiToFormFieldMap[ciMatch];
                             }
                             extractedFieldInfo[mappedKey] = { value: v.value, reasoning: v.reasoning };
+                            extractedFieldNames.add(mappedKey);
                             // Special handling for names
                             if (["Name of deceased", "Name of applicant", "Claimant", "Applicant"].includes(k)) {
                                 const { firstName, lastName } = splitName(v.value);
@@ -206,9 +217,13 @@ const FormPage = () => {
                     setExtractedFields(extractedFieldInfo);
                     setUpdatedFields(changedFields);
                     setShowUpdatedFieldsPopup(true);
+                } else {
+                    console.log('[AI->FORM] No fields were extracted or changed');
+                    setEvidenceError("No relevant data found in uploaded documents");
                 }
             } catch (e) {
-                setEvidenceError("AI extraction failed");
+                console.error('[EVIDENCE] AI extraction error:', e);
+                setEvidenceError(`AI extraction failed: ${e.message || "Unknown error"}`);
             }
         }).finally(() => setEvidenceUploading(false));
     };

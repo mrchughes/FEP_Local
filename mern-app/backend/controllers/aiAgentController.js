@@ -4,7 +4,8 @@ const path = require("path");
 const fs = require("fs");
 
 // Path to AI agent docs dir (adjust if needed)
-const AI_AGENT_DOCS = path.join(__dirname, "../../../python-app/app/ai_agent/docs");
+// Match the Python AI agent's configured path
+const AI_AGENT_DOCS = path.join(__dirname, "../../../shared-evidence");
 const EVIDENCE_UPLOADS = path.join(__dirname, "../uploads/evidence");
 
 // Copy new evidence files to AI agent docs dir
@@ -19,8 +20,11 @@ function syncEvidenceToAIAgent() {
     for (const file of files) {
         const src = path.join(EVIDENCE_UPLOADS, file);
         const dest = path.join(AI_AGENT_DOCS, file);
-        if (!fs.existsSync(dest)) {
+        try {
             fs.copyFileSync(src, dest);
+            console.log(`[SYNC] Copied evidence file ${src} to shared volume ${dest}`);
+        } catch (err) {
+            console.error(`[SYNC ERROR] Failed to copy ${src} to ${dest}:`, err.message);
         }
     }
 }
@@ -30,14 +34,27 @@ function syncEvidenceToAIAgent() {
 async function getSuggestions(req, res) {
     try {
         syncEvidenceToAIAgent();
-        // Optionally trigger re-ingest in AI agent (could call /ai-agent/ingest endpoint if exposed)
         // Call AI agent to get suggestions
-        const aiRes = await axios.post("http://localhost:5100/ai-agent/check-form", {
-            content: JSON.stringify(req.body.formData)
-        });
-        res.json({ suggestions: aiRes.data.response });
+        const aiAgentUrl = process.env.AI_AGENT_URL || "http://ai-agent:5050";
+        console.log(`[AI SUGGEST] Calling AI agent at ${aiAgentUrl}/ai-agent/check-form`);
+        try {
+            const aiRes = await axios.post(`${aiAgentUrl}/ai-agent/check-form`, {
+                content: JSON.stringify(req.body.formData)
+            }, {
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                timeout: 30000 // 30 second timeout for suggestions
+            });
+            console.log('[AI SUGGEST] AI agent response:', aiRes.data);
+            res.json({ suggestions: aiRes.data.response });
+        } catch (err) {
+            console.error("AI suggestion error:", err.message);
+            console.error("AI suggestion error details:", err.stack);
+            res.status(500).json({ error: `AI suggestion failed: ${err.message}` });
+        }
     } catch (err) {
-        console.error("AI suggestion error:", err.message);
+        console.error("AI suggestion general error:", err.message);
         res.status(500).json({ error: err.message });
     }
 }

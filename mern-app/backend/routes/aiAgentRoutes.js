@@ -2,6 +2,7 @@
 const express = require("express");
 const { getSuggestions } = require("../controllers/aiAgentController");
 const { extractFormData } = require("../controllers/aiAgentController.extract");
+const { chatWithAIAgent } = require("../controllers/aiAgentController.chat");
 const { protect } = require("../middlewares/authMiddleware");
 const router = express.Router();
 
@@ -10,5 +11,8 @@ router.post("/suggest", protect, getSuggestions);
 
 // POST /api/ai-agent/extract - Extract data from uploaded evidence
 router.post("/extract", protect, extractFormData);
+
+// POST /api/ai-agent/chat - Chat with the AI agent
+router.post("/chat", chatWithAIAgent); // No auth required for the chatbot
 
 module.exports = router;

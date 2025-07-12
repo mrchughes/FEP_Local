@@ -417,7 +417,7 @@ main {
 }
 
 /* Ensure header and footer are always visible through Cloudflare */
-header.govuk-header, 
+header.govuk-header,
 footer.govuk-footer {
     display: block !important;
     visibility: visible !important;

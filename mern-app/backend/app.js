@@ -15,14 +15,30 @@ const app = express();
 // Enable file upload middleware
 app.use(fileUpload());
 
-// Configure CORS for production
-const corsOptions = {
-  origin: process.env.FRONTEND_URL || "http://localhost:3000",
+// Configure CORS for Cloudflare and production
+const allowedOrigins = [
+  // 'http://localhost:3000',
+  // 'https://localhost:3000',
+  process.env.FRONTEND_URL,
+  process.env.CLOUDFLARE_URL,
+  'https://your-production-domain.com', // Replace with your real domain
+  'https://fep.mrchughes.site', // Cloudflare tunnel for MERN app
+  'https://agent.mrchughes.site', // Cloudflare tunnel for Python app (if needed for CORS)
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   optionsSuccessStatus: 200
-};
-
-app.use(cors(corsOptions));
+}));
 app.use(express.json({ limit: "10mb" })); // Prevent payload too large attacks
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
@@ -32,7 +48,8 @@ app.use("/api/evidence", evidenceRoutes);
 app.use("/api/ai-agent", aiAgentRoutes);
 // Serve uploaded evidence files statically
 const path = require("path");
-app.use("/uploads/evidence", express.static(path.join(__dirname, "../uploads/evidence")));
+// Fix path to uploads folder
+app.use("/uploads/evidence", express.static(path.join(__dirname, "uploads/evidence")));
 
 app.get("/", (req, res) => {
   res.send("API is running...");
