@@ -10,24 +10,43 @@ from langgraph.graph import StateGraph, END
 # from langgraph import State
 from langchain_community.tools.tavily_search import TavilySearchResults
 from typing_extensions import TypedDict
+from langchain.vectorstores import Chroma
+from werkzeug.utils import secure_filename
 
 load_dotenv()
 openai_key = os.getenv("OPENAI_API_KEY")
 tavily_key = os.getenv("TAVILY_API_KEY")
 
-# Flask app setup
-from werkzeug.utils import secure_filename
-from langchain.vectorstores import Chroma
-from langchain_openai import OpenAIEmbeddings
-import shutil
 
-app = Flask(__name__)
+# Flask app setup
+# Set template_folder to absolute path for reliability
+from flask_cors import CORS
+TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), 'templates')
+app = Flask(__name__, template_folder=TEMPLATE_DIR)
+# Enable CORS for all origins when using Cloudflare
+CORS(app, 
+     origins=["*"],  # Allow all origins since Cloudflare will handle security
+     supports_credentials=True,
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     allow_headers=["Content-Type", "Authorization", "X-Requested-With"])
+
+# Log CORS configuration
+cloudflare_url = os.getenv("CLOUDFLARE_URL", "Not set")
+frontend_url = os.getenv("FRONTEND_URL", "Not set")
+logging.info(f"[CONFIG] CORS enabled with Cloudflare URL: {cloudflare_url}, Frontend URL: {frontend_url}")
+
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+
 # Use shared Docker volume for evidence
 app.config['UPLOAD_FOLDER'] = '/shared-evidence'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 logging.info(f"[CONFIG] AI agent evidence folder set to {app.config['UPLOAD_FOLDER']}")
+
+# Use a separate folder for policy documents (RAG knowledge base)
+app.config['POLICY_UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'policy_docs')
+os.makedirs(app.config['POLICY_UPLOAD_FOLDER'], exist_ok=True)
+logging.info(f"[CONFIG] AI agent policy folder set to {app.config['POLICY_UPLOAD_FOLDER']}")
 
 # RAG setup
 persist_dir = os.path.join(os.path.dirname(__file__), 'chroma_db')
@@ -40,10 +59,16 @@ if os.path.exists(persist_dir):
         rag_db = Chroma(persist_directory=persist_dir, embedding_function=embeddings)
     except Exception:
         rag_db = None
-
 # 5. Flask route for the UI with background image
 
 from flask import Blueprint, send_from_directory
+
+# Add a test route for CORS debugging
+@app.route('/api/test-cors', methods=['GET'])
+def test_cors():
+    return jsonify({'success': True, 'message': 'CORS is working properly'})
+
+# Serve static files
 from docx import Document
 import PyPDF2
 ai_agent_bp = Blueprint('ai_agent', __name__, url_prefix='/ai-agent')
@@ -72,11 +97,67 @@ def extract_form_data():
                             content += page.extract_text() or ""
                 else:
                     content = f"File {fname} is not a supported type."
-                prompt = (
-                    "Extract relevant form fields and values from the following evidence:\n\n"
-                    + content +
-                    "\n\nReturn as a JSON object mapping field names to values."
-                )
+                # Application schema summary (field: description)
+                schema = '''
+firstName: Applicant's first name
+lastName: Applicant's last name
+dateOfBirth: Applicant's date of birth
+nationalInsuranceNumber: Applicant's National Insurance number
+addressLine1: Address line 1
+addressLine2: Address line 2
+town: Town or city
+county: County
+postcode: Postcode
+phoneNumber: Phone number
+email: Email address
+partnerFirstName: Partner's first name
+partnerLastName: Partner's last name
+partnerDateOfBirth: Partner's date of birth
+partnerNationalInsuranceNumber: Partner's National Insurance number
+partnerBenefitsReceived: Benefits the partner receives
+partnerSavings: Partner's savings
+deceasedFirstName: Deceased's first name
+deceasedLastName: Deceased's last name
+deceasedDateOfBirth: Deceased's date of birth
+deceasedDateOfDeath: Deceased's date of death
+deceasedPlaceOfDeath: Place of death
+deceasedCauseOfDeath: Cause of death
+deceasedCertifyingDoctor: Certifying doctor
+deceasedCertificateIssued: Certificate issued
+relationshipToDeceased: Relationship to deceased
+supportingEvidence: Supporting evidence
+responsibilityStatement: Responsibility statement
+responsibilityDate: Responsibility date
+benefitType: Type of benefit
+benefitReferenceNumber: Benefit reference number
+benefitLetterDate: Date on benefit letter
+householdBenefits: Household benefits (array)
+incomeSupportDetails: Details about Income Support
+disabilityBenefits: Disability benefits (array)
+carersAllowance: Carer's Allowance
+carersAllowanceDetails: Carer's Allowance details
+funeralDirector: Funeral director
+funeralEstimateNumber: Funeral estimate number
+funeralDateIssued: Date funeral estimate issued
+funeralTotalEstimatedCost: Total estimated funeral cost
+funeralDescription: Funeral description
+funeralContact: Funeral contact
+evidence: Evidence documents (array)
+'''
+                prompt = f'''
+You are an expert assistant helping to process evidence for a funeral expenses claim. The following is the application schema:
+{schema}
+
+Read the following evidence and extract all information relevant to the claim. For each field you extract, provide:
+- The field name (from the schema above)
+- The value
+- A short explanation of your reasoning or the evidence source (e.g. "Found in death certificate under 'Date of death'")
+If a field is not directly mentioned but can be inferred, include it and explain your inference.
+Return your answer as a JSON object where each key is a field name, and each value is an object with 'value' and 'reasoning'.
+
+Evidence:
+{content}
+'''
                 response = llm.invoke(prompt)
                 extracted[fname] = str(response.content) if hasattr(response, 'content') else str(response)
                 logging.info(f"[EXTRACT] Extraction result for {fname}: {extracted[fname]}")
@@ -85,20 +166,20 @@ def extract_form_data():
                 extracted[fname] = f"Error extracting: {e}"
     return jsonify(extracted)
 
-# --- List documents in RAG ---
+# --- List policy documents in RAG ---
 @ai_agent_bp.route('/docs', methods=['GET'])
 def list_docs():
-    docs_dir = app.config['UPLOAD_FOLDER']
+    docs_dir = app.config['POLICY_UPLOAD_FOLDER']
     files = []
     for fname in os.listdir(docs_dir):
         if fname.lower().endswith(('.pdf', '.docx', '.txt')):
             files.append(fname)
     return jsonify({'documents': files})
 
-# --- Remove a document from RAG ---
+# --- Remove a policy document from RAG ---
 @ai_agent_bp.route('/docs/<filename>', methods=['DELETE'])
 def delete_doc(filename):
-    docs_dir = app.config['UPLOAD_FOLDER']
+    docs_dir = app.config['POLICY_UPLOAD_FOLDER']
     file_path = os.path.join(docs_dir, filename)
     if not os.path.exists(file_path):
         return jsonify({'success': False, 'error': 'File not found'}), 404
@@ -128,7 +209,7 @@ def upload():
     if file.filename == '':
         return jsonify({'success': False, 'error': 'No selected file'}), 400
     filename = secure_filename(file.filename)
-    save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    save_path = os.path.join(app.config['POLICY_UPLOAD_FOLDER'], filename)
     file.save(save_path)
     # Automatically ingest after upload
     try:
@@ -265,9 +346,11 @@ graph = builder.compile()
 # 5. Flask route for the UI with background image
 
 
+
+
+
 @ai_agent_bp.route('/')
 def home():
-    print("here")
     return render_template("index.html")
 
 @ai_agent_bp.route('/chat', methods=['POST'])
@@ -373,6 +456,12 @@ def check_form():
         response_str = str(response)
     return jsonify({"response": response_str})
 
+
+
+
+@app.route('/')
+def home_root():
+    return render_template("index.html")
 
 app.register_blueprint(ai_agent_bp)
 print("[INFO] Registered ai_agent blueprint at /ai-agent")

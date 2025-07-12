@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="govuk-template">
 
 <head>
     <meta charset="utf-8">
@@ -7,112 +7,193 @@
     <title>Policy Chatbot & Document RAG | GOV.UK Prototype</title>
     <link rel="stylesheet"
         href="https://assets.publishing.service.gov.uk/government-frontend/govuk-frontend-4.7.0.min.css">
+    <script src="https://assets.publishing.service.gov.uk/government-frontend/govuk-frontend-4.7.0.min.js"></script>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=GDS+Transport:wght@400;700&display=swap" rel="stylesheet">
+    <!-- CSP for Cloudflare and GOV.UK CDN -->
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' * data: blob: 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://assets.publishing.service.gov.uk https://fonts.googleapis.com; script-src 'self' 'unsafe-inline' https://assets.publishing.service.gov.uk; font-src 'self' https://fonts.gstatic.com https://assets.publishing.service.gov.uk data:; img-src 'self' data: https://assets.publishing.service.gov.uk; connect-src 'self' https: http:;">
+    
+    <!-- Ensure styles load properly with Cloudflare -->
     <style>
+        /* Critical path CSS to ensure header and footer are visible */
+        .govuk-header {
+            background-color: #0b0c0c;
+            border-bottom: 10px solid #1d70b8;
+            display: block !important;
+        }
+        .govuk-footer {
+            border-top: 10px solid #1d70b8;
+            background-color: #f3f2f1;
+            display: block !important;
+            margin-top: 50px;
+        }
         body {
-            background-image: url(/static/images/background.jpg);
-            background-size: cover;
-            background-repeat: no-repeat;
-            background-attachment: fixed;
-            font-family: "GDS Transport", Arial, sans-serif;
-            margin: 0;
-            padding: 0;
+            display: flex;
+            flex-direction: column;
             min-height: 100vh;
         }
-
-        .govuk-width-container {
-            background: rgba(255, 255, 255, 0.97);
-            border-radius: 8px;
-            margin-top: 32px;
-            margin-bottom: 32px;
-            box-shadow: 0 4px 16px #0002;
-            padding: 32px 24px;
-        }
-
-        .govuk-heading-xl {
-            margin-bottom: 0.5em;
-        }
-
-        .rag-doc-list {
-            margin-bottom: 1em;
-        }
-
-        .rag-doc-list li {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0.25em 0;
-        }
-
-        .progress-bar {
-            width: 100%;
-            background: #f3f2f1;
-            border-radius: 4px;
-            margin: 0.5em 0;
-            height: 1.5em;
-            overflow: hidden;
-        }
-
-        .progress-bar-inner {
-            height: 100%;
-            background: #1d70b8;
-            color: #fff;
-            text-align: center;
-            white-space: nowrap;
-            transition: width 0.3s;
-        }
-
-        #chat-box {
-            white-space: pre-line;
-            border: 1px solid #b1b4b6;
-            padding: 10px;
-            height: 320px;
-            overflow-y: scroll;
-            background-color: #f0f0f0;
-            color: #0b0c0c;
-            margin-bottom: 10px;
-        }
-
-        .govuk-button--danger {
-            background: #d4351c;
+        main {
+            flex: 1 0 auto;
         }
     </style>
 </head>
 
-
 <body class="govuk-template__body">
-    <div class="govuk-width-container">
-        <h1 class="govuk-heading-xl">Policy Chatbot & Document Upload (RAG)</h1>
-        <p class="govuk-body-l">This tool allows DWP agents to upload policy documents (PDF, DOCX, TXT) to the chatbot's
-            knowledge base (RAG), and to interact with the chatbot for policy queries. Uploaded documents are vectorised
-            and used to improve answers. You can also remove documents from the knowledge base.</p>
-
-        <form id="upload-form" enctype="multipart/form-data" class="govuk-form-group govuk-!-margin-bottom-6">
-            <label class="govuk-label govuk-label--m" for="file-upload">Upload a policy document</label>
-            <input class="govuk-file-upload" id="file-upload" type="file" name="file" accept=".pdf,.docx,.txt" required>
-            <button class="govuk-button govuk-!-margin-top-2" type="submit" id="upload-btn">Upload</button>
-            <span id="upload-status" class="govuk-body govuk-!-margin-left-2"></span>
-            <div id="progress-container" style="display:none;">
-                <div class="progress-bar">
-                    <div class="progress-bar-inner" id="progress-bar-inner" style="width:0%">0%</div>
+    <header class="govuk-header service-header" role="banner" data-module="govuk-header">
+        <div class="govuk-header__container govuk-width-container">
+            <div style="display: flex; align-items: center; gap: '32px'">
+                <div class="govuk-header__logo">
+                    <a href="https://www.gov.uk" class="govuk-header__link govuk-header__link--homepage">
+                        <span class="govuk-header__logotype">
+                            <svg aria-hidden="true" focusable="false" class="govuk-header__logotype-crown"
+                                xmlns="http://www.w3.org/2000/svg" viewBox="0 0 132 97" height="32" width="38">
+                                <path fill="#fff" fill-rule="evenodd"
+                                    d="M25 30.2c3.5 1.5 7.7-.2 9.1-3.7 1.5-3.6-.2-7.8-3.9-9.2-3.6-1.4-7.6.3-9.1 3.9-1.4 3.5.3 7.5 3.9 9zM9 39.5c3.6 1.5 7.8-.2 9.2-3.7 1.5-3.6-.2-7.8-3.9-9.1-3.6-1.5-7.6.2-9.1 3.8-1.4 3.5.3 7.5 3.8 9zM4.4 57.2c3.5 1.5 7.7-.2 9.1-3.8 1.5-3.6-.2-7.7-3.9-9.1-3.5-1.5-7.6.3-9.1 3.8-1.4 3.5.3 7.6 3.9 9.1zm38.3-21.4c3.5 1.5 7.7-.2 9.1-3.8 1.5-3.6-.2-7.7-3.9-9.1-3.6-1.5-7.6.3-9.1 3.8-1.3 3.6.4 7.7 3.9 9.1zm64.4-5.6c-3.6 1.5-7.8-.2-9.1-3.7-1.5-3.6.2-7.8 3.8-9.2 3.6-1.4 7.7.3 9.2 3.9 1.3 3.5-.4 7.5-3.9 9zm15.9 9.3c-3.6 1.5-7.7-.2-9.1-3.7-1.5-3.6.2-7.8 3.7-9.1 3.6-1.5 7.7.2 9.2 3.8 1.5 3.5-.3 7.5-3.8 9zm4.7 17.7c-3.6 1.5-7.8-.2-9.2-3.8-1.5-3.6.2-7.7 3.9-9.1 3.6-1.5 7.7.3 9.2 3.8 1.3 3.5-.4 7.6-3.9 9.1zM89.3 35.8c-3.6 1.5-7.8-.2-9.2-3.8-1.4-3.6.2-7.7 3.9-9.1 3.6-1.5 7.7.3 9.2 3.8 1.4 3.6-.3 7.7-3.9 9.1zM69.7 17.7l8.9 4.7V9.3l-8.9 2.8c-.2-.3-.5-.6-.9-.9L72.4 0H59.6l3.5 11.2c-.3.3-.6.5-.9.9l-8.8-2.8v13.1l8.8-4.7c.3.3.6.7.9.9l-5 15.4v.1c-.2.8-.4 1.6-.4 2.4 0 4.1 3.1 7.5 7 8.1h.2c.3 0 .7.1 1 .1.4 0 .7 0 1-.1h.2c4-.6 7.1-4.1 7.1-8.1 0-.8-.1-1.7-.4-2.4V34l-5.1-15.4c.4-.2.7-.6 1-.9zM66 92.8c16.9 0 32.8 1.1 47.1 3.2 4-16.9 8.9-26.7 14-33.5l-9.6-3.4c1 4.9 1.1 7.2 0 10.2-1.5-1.4-3-4.3-4.2-8.7L108.6 76c2.8-2 5-3.2 7.5-3.3-4.4 9.4-10 11.9-13.6 11.2-4.3-.8-6.3-4.6-5.6-7.9 1-4.7 5.7-5.9 8-.5 4.3-8.7-3-11.4-7.6-8.8 7.1-7.2 7.9-13.5 2.1-21.1-8 6.1-8.1 12.3-4.5 20.8-4.7-5.4-12.1-2.5-9.5 6.2 3.4-5.2 7.9-2 7.2 3.1-.6 4.3-6.4 7.8-13.5 7.2-10.3-.9-10.9-8-11.2-13.8 2.5-.5 7.1 1.8 11 7.3L80.2 60c-4.1 4.4-8 5.3-12.3 5.4 1.4-4.4 8-11.6 8-11.6H55.5s6.4 7.2 7.9 11.6c-4.2-.1-8-1-12.3-5.4L42.4 71c3.9-5.5 8.5-7.7 10.9-7.3-.3 5.8-.9 12.8-11.1 13.8-7.2.6-12.9-2.9-13.5-7.2-.7-5 3.8-8.3 7.1-3.1 2.7-8.7-4.6-11.6-9.4-6.2 3.7-8.5 3.6-14.7-4.6-20.8-5.8 7.6-5 13.9 2.2 21.1-4.7-2.6-11.9.1-7.7 8.8 2.3-5.5 7.1-4.2 8.1.5.7 3.3-1.3 7.1-5.7 7.9-3.5.7-9-1.8-13.5-11.2 2.5.1 4.7 1.3 7.5 3.3l-4.7-15.4c-1.2 4.4-2.7 7.2-4.3 8.7-1.1-3-.9-5.3 0-10.2l-9.5 3.4c5 6.9 9.9 16.7 14 33.5 14.8-2.1 30.8-3.2 47.7-3.2z">
+                                </path>
+                            </svg>
+                            <span class="govuk-header__logotype-text">GOV.UK</span>
+                        </span>
+                    </a>
                 </div>
-                <span id="progress-label" class="govuk-body-s"></span>
+                <a href="/" class="govuk-header__service-name">
+                    Apply for funeral expenses payment
+                </a>
             </div>
-        </form>
-
-        <div class="govuk-form-group govuk-!-margin-bottom-6">
-            <label class="govuk-label govuk-label--m">Documents in RAG knowledge base</label>
-            <ul id="doc-list" class="govuk-list rag-doc-list"></ul>
         </div>
+    </header>
 
-        <div class="govuk-form-group">
-            <label class="govuk-label govuk-label--m" for="input">Chat with the policy assistant</label>
-            <div id="chat-box"></div>
-            <input class="govuk-input govuk-!-width-three-quarters" id="input" type="text"
-                placeholder="Ask a policy question..." autocomplete="off" autofocus>
+    <div class="govuk-phase-banner">
+        <div class="govuk-width-container">
+            <p class="govuk-phase-banner__content">
+                <strong class="govuk-tag govuk-phase-banner__content__tag">ALPHA</strong>
+                <span class="govuk-phase-banner__text">This is a new service – your <a class="govuk-link"
+                        href="#feedback">feedback</a> will help us to improve it.</span>
+            </p>
         </div>
     </div>
 
+    <main class="govuk-main-wrapper" id="main-content" role="main">
+        <div class="govuk-width-container">
+            <div class="govuk-grid-row">
+                <div class="govuk-grid-column-two-thirds">
+                    <h1 class="govuk-heading-xl">Policy Document Management</h1>
+                    <p class="govuk-body">This tool allows DWP agents to manage policy documents and get assistance with
+                        policy queries.</p>
+                </div>
+            </div>
+
+            <div class="govuk-grid-row">
+                <div class="govuk-grid-column-full">
+                    <div class="govuk-card">
+                        <h2 class="govuk-card__heading">Upload Policy Documents</h2>
+                        <p class="govuk-body">Upload PDF, DOCX, or TXT policy documents to the knowledge base. Documents
+                            will be processed and indexed to provide better responses to policy queries.</p>
+
+                        <form id="upload-form" enctype="multipart/form-data"
+                            class="govuk-form-group upload-form-container">
+                            <div class="govuk-form-group">
+                                <label class="govuk-label" for="file-upload">Select a policy document</label>
+                                <input class="govuk-file-upload" id="file-upload" type="file" name="file"
+                                    accept=".pdf,.docx,.txt" required>
+                            </div>
+
+                            <div class="upload-status-container">
+                                <button class="govuk-button govuk-button--primary" type="submit" id="upload-btn"
+                                    data-module="govuk-button">Upload Document</button>
+                                <span id="upload-status" class="govuk-body govuk-!-margin-left-2"></span>
+                            </div>
+
+                            <div id="progress-container" style="display:none; margin-top: 15px;">
+                                <div class="progress-bar">
+                                    <div class="progress-bar-inner" id="progress-bar-inner" style="width:0%">0%</div>
+                                </div>
+                                <span id="progress-label" class="govuk-body-s"></span>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="govuk-grid-row">
+                <div class="govuk-grid-column-one-third">
+                    <div class="govuk-card">
+                        <h2 class="govuk-card__heading">Knowledge Base Documents</h2>
+                        <p class="govuk-body">Manage documents currently in the policy knowledge base:</p>
+                        <ul id="doc-list" class="rag-doc-list govuk-list"></ul>
+                    </div>
+                </div>
+                <div class="govuk-grid-column-two-thirds">
+                    <div class="govuk-card chat-container">
+                        <h2 class="govuk-card__heading">Policy Assistant</h2>
+                        <p class="govuk-body">Ask questions about DWP policy to get instant assistance.</p>
+
+                        <div id="chat-box"></div>
+
+                        <div class="chat-input-container">
+                            <input class="govuk-input" id="input" type="text" placeholder="Ask a policy question..."
+                                autocomplete="off" autofocus>
+                            <button class="govuk-button" id="send-btn" data-module="govuk-button">Send</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="govuk-footer" role="contentinfo">
+        <div class="govuk-width-container">
+            <div class="govuk-footer__meta">
+                <div class="govuk-footer__meta-item govuk-footer__meta-item--grow">
+                    <h2 class="govuk-visually-hidden">Support links</h2>
+                    <ul class="govuk-footer__inline-list">
+                        <li class="govuk-footer__inline-list-item">
+                            <a class="govuk-footer__link" href="#">
+                                Help
+                            </a>
+                        </li>
+                        <li class="govuk-footer__inline-list-item">
+                            <a class="govuk-footer__link" href="#">
+                                Privacy
+                            </a>
+                        </li>
+                        <li class="govuk-footer__inline-list-item">
+                            <a class="govuk-footer__link" href="#">
+                                Cookies
+                            </a>
+                        </li>
+                        <li class="govuk-footer__inline-list-item">
+                            <a class="govuk-footer__link" href="#">
+                                Accessibility statement
+                            </a>
+                        </li>
+                    </ul>
+                    <span class="govuk-footer__licence-description">
+                        All content is available under the <a class="govuk-footer__link"
+                            href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
+                            rel="license">Open Government Licence v3.0</a>, except where otherwise stated
+                    </span>
+                </div>
+                <div class="govuk-footer__meta-item">
+                    <a class="govuk-footer__link govuk-footer__copyright-logo"
+                        href="https://www.nationalarchives.gov.uk/information-management/re-using-public-sector-information/uk-government-licensing-framework/crown-copyright/">©
+                        Crown copyright</a>
+                </div>
+            </div>
+        </div>
+    </footer>
     <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            window.GOVUKFrontend.initAll();
+            fetchDocs();
+
+            // Initialize chat functionality
+            initChat();
+
+            // Initialize file upload
+            initFileUpload();
+        });
+
         function fetchDocs() {
             fetch('/ai-agent/docs')
                 .then(res => res.json())
@@ -122,26 +203,50 @@
                     if (data.documents && data.documents.length > 0) {
                         data.documents.forEach(doc => {
                             const li = document.createElement('li');
-                            li.textContent = doc;
-                            const btn = document.createElement('button');
-                            btn.className = 'govuk-button govuk-button--danger govuk-!-margin-left-2';
-                            btn.textContent = 'Remove';
-                            btn.onclick = function () { removeDoc(doc); };
-                            li.appendChild(btn);
+                            li.innerHTML = `
+                                <span class="doc-name">${doc}</span>
+                                <div class="doc-actions">
+                                    <button class="govuk-button govuk-button--danger govuk-button--small remove-doc-btn" data-filename="${doc}">Remove</button>
+                                </div>
+                            `;
                             docList.appendChild(li);
+                        });
+
+                        // Add event listeners to remove buttons
+                        document.querySelectorAll('.remove-doc-btn').forEach(btn => {
+                            btn.addEventListener('click', function () {
+                                removeDoc(this.getAttribute('data-filename'));
+                            });
                         });
                     } else {
                         docList.innerHTML = '<li class="govuk-body-s">No documents uploaded yet.</li>';
                     }
+                })
+                .catch(error => {
+                    console.error('Error fetching documents:', error);
+                    const docList = document.getElementById('doc-list');
+                    docList.innerHTML = '<li class="govuk-body-s govuk-!-font-weight-bold" style="color: #d4351c;">Error loading documents. Please try again.</li>';
                 });
         }
 
         function removeDoc(filename) {
-            if (!confirm('Are you sure you want to remove this document from RAG?')) return;
-            fetch('/ai-agent/docs/' + encodeURIComponent(filename), { method: 'DELETE' })
+            if (!confirm('Are you sure you want to remove this document from the knowledge base?')) return;
+
+            fetch('/ai-agent/docs/' + encodeURIComponent(filename), {
+                method: 'DELETE'
+            })
                 .then(res => res.json())
                 .then(data => {
-                    fetchDocs();
+                    if (data.success) {
+                        showNotification('Document removed successfully', 'success');
+                        fetchDocs();
+                    } else {
+                        showNotification('Failed to remove document', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error removing document:', error);
+                    showNotification('Error removing document', 'error');
                 });
         }
 
@@ -149,22 +254,70 @@
             const container = document.getElementById('progress-container');
             const bar = document.getElementById('progress-bar-inner');
             const text = document.getElementById('progress-label');
+
             container.style.display = 'block';
             bar.style.width = percent + '%';
             bar.textContent = percent + '%';
             text.textContent = label;
-            if (percent >= 100) setTimeout(() => { container.style.display = 'none'; }, 1200);
+
+            if (percent >= 100) {
+                setTimeout(() => {
+                    container.style.display = 'none';
+                }, 1500);
+            }
         }
 
-        window.onload = function () {
-            fetchDocs();
+        function showNotification(message, type) {
+            const status = document.getElementById('upload-status');
+            status.textContent = message;
+            status.className = 'govuk-body govuk-!-margin-left-2';
 
-            // Chat logic
+            if (type === 'error') {
+                status.style.color = '#d4351c';
+                status.style.fontWeight = 'bold';
+            } else if (type === 'success') {
+                status.style.color = '#00703c';
+                status.style.fontWeight = 'normal';
+            } else {
+                status.style.color = '';
+                status.style.fontWeight = 'normal';
+            }
+
+            setTimeout(() => {
+                status.textContent = '';
+            }, 5000);
+        }
+
+        function initChat() {
+            const chatBox = document.getElementById('chat-box');
+            const inputField = document.getElementById('input');
+            const sendButton = document.getElementById('send-btn');
+
+            // Style the chat box
+            chatBox.style.padding = '20px';
+            chatBox.style.height = '300px';
+            chatBox.style.border = '1px solid #b1b4b6';
+            chatBox.style.borderRadius = '4px';
+            chatBox.style.backgroundColor = '#f8f8f8';
+            chatBox.style.fontFamily = '"GDS Transport", arial, sans-serif';
+
+            // Add welcome message
+            chatBox.innerHTML = '<div class="chat-message assistant"><strong>Assistant:</strong> Hello! I\'m your policy assistant. How can I help you today?</div>';
+
             function sendMessage() {
-                const inputField = document.getElementById("input");
                 const input = inputField.value.trim();
                 if (!input) return;
+
+                // Disable input while processing
                 inputField.disabled = true;
+                sendButton.disabled = true;
+                sendButton.textContent = 'Sending...';
+
+                // Add user message to chat
+                chatBox.innerHTML += `<div class="chat-message user"><strong>You:</strong> ${input}</div>`;
+                chatBox.scrollTop = chatBox.scrollHeight;
+
+                // Send request to backend
                 fetch('/ai-agent/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -172,60 +325,180 @@
                 })
                     .then(response => response.json())
                     .then(data => {
-                        const chatBox = document.getElementById("chat-box");
                         let responseText = data.response;
+
+                        // Handle error responses
                         if (typeof responseText === 'string' && responseText.trim().toLowerCase().startsWith('sorry, i couldn')) {
-                            responseText = '[Web search error: Tavily or LangChain could not get a response. Check API key, quota, or internet access.]';
+                            responseText = '[Error: Unable to get a response. Please try again or rephrase your question.]';
                         }
-                        chatBox.innerText += "You: " + input + "\nAssistant: " + responseText + "\n\n";
+
+                        // Add assistant response
+                        chatBox.innerHTML += `<div class="chat-message assistant"><strong>Assistant:</strong> ${responseText}</div>`;
+
+                        // Reset UI
                         inputField.value = "";
                         inputField.disabled = false;
+                        sendButton.disabled = false;
+                        sendButton.textContent = 'Send';
+
+                        // Scroll to bottom
                         chatBox.scrollTop = chatBox.scrollHeight;
+
+                        // Focus input field
+                        inputField.focus();
                     })
-                    .catch(error => console.error('Error:', error));
+                    .catch(error => {
+                        console.error('Error:', error);
+                        chatBox.innerHTML += `<div class="chat-message error"><strong>Assistant:</strong> Sorry, there was an error processing your request. Please try again.</div>`;
+
+                        // Reset UI
+                        inputField.disabled = false;
+                        sendButton.disabled = false;
+                        sendButton.textContent = 'Send';
+                        chatBox.scrollTop = chatBox.scrollHeight;
+                    });
             }
-            document.getElementById("input").addEventListener("keydown", function (event) {
-                if (event.key === "Enter") {
+
+            // Event listeners
+            inputField.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter') {
                     event.preventDefault();
                     sendMessage();
                 }
             });
 
-            // Upload logic with progress simulation
-            document.getElementById("upload-form").addEventListener("submit", function (event) {
+            sendButton.addEventListener('click', function () {
+                sendMessage();
+            });
+        }
+
+        function initFileUpload() {
+            const uploadForm = document.getElementById('upload-form');
+            const fileInput = document.getElementById('file-upload');
+            const uploadBtn = document.getElementById('upload-btn');
+
+            uploadForm.addEventListener('submit', function (event) {
                 event.preventDefault();
-                const fileInput = document.getElementById("file-upload");
-                const status = document.getElementById("upload-status");
+
+                if (!fileInput.files[0]) {
+                    showNotification('Please select a file to upload', 'error');
+                    return;
+                }
+
+                // Prepare form data
                 const formData = new FormData();
-                formData.append("file", fileInput.files[0]);
-                status.textContent = "Uploading...";
-                showProgress(10, 'Uploading...');
-                fetch("/ai-agent/upload", {
-                    method: "POST",
+                formData.append('file', fileInput.files[0]);
+
+                // Update UI
+                uploadBtn.disabled = true;
+                uploadBtn.textContent = 'Uploading...';
+                showNotification('Uploading...', 'info');
+                showProgress(10, 'Uploading file...');
+
+                // Send request
+                fetch('/ai-agent/upload', {
+                    method: 'POST',
                     body: formData
                 })
                     .then(response => response.json())
                     .then(data => {
                         if (data.success) {
-                            showProgress(60, 'Tokenising and vectorising...');
+                            // Simulate processing steps with progress updates
+                            showProgress(40, 'Processing document...');
+
                             setTimeout(() => {
-                                showProgress(100, 'Complete!');
-                                status.textContent = "Upload successful!";
-                                fileInput.value = "";
-                                fetchDocs();
-                            }, 1200);
+                                showProgress(70, 'Creating vector embeddings...');
+
+                                setTimeout(() => {
+                                    showProgress(100, 'Complete!');
+                                    showNotification('Document uploaded and processed successfully', 'success');
+                                    fileInput.value = '';
+                                    fetchDocs();
+
+                                    // Reset button
+                                    uploadBtn.disabled = false;
+                                    uploadBtn.textContent = 'Upload Document';
+                                }, 800);
+                            }, 800);
                         } else {
-                            status.textContent = "Upload failed.";
                             showProgress(0, '');
+                            showNotification(data.message || 'Upload failed', 'error');
+
+                            // Reset button
+                            uploadBtn.disabled = false;
+                            uploadBtn.textContent = 'Upload Document';
                         }
                     })
-                    .catch(() => {
-                        status.textContent = "Upload failed.";
+                    .catch(error => {
+                        console.error('Error uploading file:', error);
                         showProgress(0, '');
+                        showNotification('Error uploading file', 'error');
+
+                        // Reset button
+                        uploadBtn.disabled = false;
+                        uploadBtn.textContent = 'Upload Document';
                     });
             });
-        };
+        }
     </script>
+
+    <footer class="govuk-footer" role="contentinfo">
+        <div class="govuk-width-container">
+            <div class="govuk-footer__meta">
+                <div class="govuk-footer__meta-item govuk-footer__meta-item--grow">
+                    <h2 class="govuk-visually-hidden">Support links</h2>
+                    <ul class="govuk-footer__inline-list">
+                        <li class="govuk-footer__inline-list-item">
+                            <a class="govuk-footer__link" href="#">Help</a>
+                        </li>
+                        <li class="govuk-footer__inline-list-item">
+                            <a class="govuk-footer__link" href="#">Privacy</a>
+                        </li>
+                        <li class="govuk-footer__inline-list-item">
+                            <a class="govuk-footer__link" href="#">Cookies</a>
+                        </li>
+                        <li class="govuk-footer__inline-list-item">
+                            <a class="govuk-footer__link" href="#">Contact</a>
+                        </li>
+                        <li class="govuk-footer__inline-list-item">
+                            <a class="govuk-footer__link" href="#">Terms and conditions</a>
+                        </li>
+                        <li class="govuk-footer__inline-list-item">
+                            <a class="govuk-footer__link" href="#">Accessibility statement</a>
+                        </li>
+                    </ul>
+                    <svg
+                        aria-hidden="true"
+                        focusable="false"
+                        class="govuk-footer__licence-logo"
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 483.2 195.7"
+                        height="17"
+                        width="41"
+                    >
+                        <path
+                            fill="currentColor"
+                            d="M421.5 142.8V.1l-50.7 32.3v161.1h112.4v-50.7zm-122.3-9.6A47.12 47.12 0 0 1 221 97.8c0-26 21.1-47.1 47.1-47.1 16.7 0 31.4 8.7 39.7 21.8l42.7-27.2A97.63 97.63 0 0 0 268.1 0c-36.5 0-68.3 20.1-85.1 49.7A98 98 0 0 0 97.8 0C43.9 0 0 43.9 0 97.8s43.9 97.8 97.8 97.8c36.5 0 68.3-20.1 85.1-49.7a97.76 97.76 0 0 0 149.6 25.4l19.4 22.2h3v-87.8h-80l24.3 27.5zM97.8 145c-26 0-47.1-21.1-47.1-47.1s21.1-47.1 47.1-47.1 47.2 21 47.2 47S123.8 145 97.8 145"
+                        />
+                    </svg>
+                    <span class="govuk-footer__licence-description">
+                        All content is available under the
+                        <a
+                            class="govuk-footer__link"
+                            href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
+                            rel="license"
+                        >Open Government Licence v3.0</a>, except where otherwise stated
+                    </span>
+                </div>
+                <div class="govuk-footer__meta-item">
+                    <a
+                        class="govuk-footer__link govuk-footer__copyright-logo"
+                        href="https://www.nationalarchives.gov.uk/information-management/re-using-public-sector-information/uk-government-licensing-framework/crown-copyright/"
+                    >© Crown copyright</a>
+                </div>
+            </div>
+        </div>
+    </footer>
 </body>
 
 </html>
