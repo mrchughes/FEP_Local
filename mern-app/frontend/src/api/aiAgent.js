@@ -1,5 +1,5 @@
 // src/api/aiAgent.js
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5200/api";
+const API_URL = process.env.REACT_APP_API_URL || "/api";
 
 export async function getAISuggestions(formData, token) {
   const res = await fetch(`${API_URL}/ai-agent/suggest`, {

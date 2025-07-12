@@ -1,7 +1,7 @@
 // Utility functions for evidence API
 
 // Use backend API URL directly for production and dev
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5200/api";
+const API_URL = process.env.REACT_APP_API_URL || "/api";
 
 export async function uploadEvidenceFile(file, token) {
   const formData = new FormData();

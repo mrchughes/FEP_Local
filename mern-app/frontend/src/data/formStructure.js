@@ -1,6 +1,25 @@
 // Form structure that matches the actual form implementation
 export const formSections = [
   {
+    id: 'evidence-documentation',
+    title: 'Evidence and documentation',
+    fields: [
+      {
+        name: 'evidence',
+        label: 'Documents you can provide',
+        type: 'checkbox',
+        options: [
+          'Death certificate',
+          'Funeral bill or estimate',
+          'Proof of benefits',
+          'Proof of relationship to deceased',
+          'Proof of responsibility for funeral'
+        ],
+        required: true
+      }
+    ]
+  },
+  {
     id: 'personal-details',
     title: 'Your personal details',
     fields: [

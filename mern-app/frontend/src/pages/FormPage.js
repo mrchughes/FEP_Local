@@ -106,45 +106,39 @@ const FormPage = () => {
             try {
                 const result = await extractFormData(user?.token);
                 console.log('[EVIDENCE] AI extraction result:', result);
-                
+
                 // result.extracted is an object: { filename: extractedJsonString }
                 let merged = { ...formData };
                 let changedFields = [];
-                let extractedFieldNames = new Set();
-                
+                let extractedFieldInfo = {};
                 Object.entries(result.extracted || {}).forEach(([filename, val]) => {
                     console.log(`[EVIDENCE] Processing extraction from ${filename}:`, val);
                     try {
-                        // Try to parse the LLM's JSON output
                         let obj;
                         try {
                             obj = JSON.parse(val);
                         } catch (parseErr) {
                             console.error(`[EVIDENCE] Failed to parse JSON from ${filename}:`, parseErr);
-                            return; // Skip this file if JSON is invalid
+                            return;
                         }
                         Object.entries(obj).forEach(([k, v]) => {
-                            if (!v || v === '') {
+                            // v is expected to be { value, reasoning }
+                            if (!v || !v.value) {
                                 console.log(`[EVIDENCE] Skipping empty value for field: ${k}`);
-                                return; // Skip empty values
+                                return;
                             }
-
-                            // Try direct mapping, then case-insensitive mapping
                             let mappedKey = aiToFormFieldMap[k] || k;
                             if (!aiToFormFieldMap[k]) {
-                                // Try case-insensitive match
                                 const lowerK = k.toLowerCase();
                                 const ciMatch = Object.keys(aiToFormFieldMap).find(
                                     key => key.toLowerCase() === lowerK
                                 );
                                 if (ciMatch) mappedKey = aiToFormFieldMap[ciMatch];
                             }
-                            extractedFieldNames.add(k); // Record original field name for display
-
+                            extractedFieldInfo[mappedKey] = { value: v.value, reasoning: v.reasoning };
                             // Special handling for names
                             if (["Name of deceased", "Name of applicant", "Claimant", "Applicant"].includes(k)) {
-                                const { firstName, lastName } = splitName(v);
-                                // Map to correct fields (deceased or applicant)
+                                const { firstName, lastName } = splitName(v.value);
                                 if (k === "Name of deceased") {
                                     if (merged.deceasedFirstName !== firstName) changedFields.push("deceasedFirstName");
                                     if (merged.deceasedLastName !== lastName) changedFields.push("deceasedLastName");
@@ -157,9 +151,7 @@ const FormPage = () => {
                                     merged.lastName = lastName;
                                 }
                             } else if (k === "Address") {
-                                // Try to split address into line1, town, postcode if possible
-                                // Example: "12 Rose Lane, Manchester, M1 2AB"
-                                const addressParts = v.split(',').map(part => part.trim());
+                                const addressParts = v.value.split(',').map(part => part.trim());
                                 if (addressParts.length === 3) {
                                     merged.addressLine1 = addressParts[0];
                                     merged.town = addressParts[1];
@@ -170,24 +162,21 @@ const FormPage = () => {
                                     merged.postcode = addressParts[1];
                                     changedFields.push("addressLine1", "postcode");
                                 } else {
-                                    // Fallback: put everything in addressLine1
-                                    merged.addressLine1 = v;
+                                    merged.addressLine1 = v.value;
                                     changedFields.push("addressLine1");
                                 }
                             } else if (["Income Support", "Jobseeker's Allowance", "Employment and Support Allowance", "Universal Credit", "Pension Credit"].includes(k)) {
-                                // Add to householdBenefits array if not already present
                                 if (!Array.isArray(merged.householdBenefits)) merged.householdBenefits = [];
                                 if (!merged.householdBenefits.includes(k)) {
                                     merged.householdBenefits.push(k);
                                     changedFields.push("householdBenefits");
                                 }
                             } else if (["Benefit details", "Income Support details"].includes(k)) {
-                                // Set details field
-                                if (merged[mappedKey] !== v) changedFields.push(mappedKey);
-                                merged[mappedKey] = v;
+                                if (merged[mappedKey] !== v.value) changedFields.push(mappedKey);
+                                merged[mappedKey] = v.value;
                             } else {
-                                if (merged[mappedKey] !== v) changedFields.push(mappedKey);
-                                merged[mappedKey] = v;
+                                if (merged[mappedKey] !== v.value) changedFields.push(mappedKey);
+                                merged[mappedKey] = v.value;
                             }
                         });
                     } catch (e) {
@@ -212,9 +201,9 @@ const FormPage = () => {
                         console.warn('Failed to persist extracted data:', err);
                     }
                 }
-                if (extractedFieldNames.size > 0 || changedFields.length > 0) {
+                if (Object.keys(extractedFieldInfo).length > 0 || changedFields.length > 0) {
                     console.log('[AI->FORM][POPUP] changedFields:', changedFields, 'merged:', merged);
-                    setExtractedFields(Array.from(extractedFieldNames));
+                    setExtractedFields(extractedFieldInfo);
                     setUpdatedFields(changedFields);
                     setShowUpdatedFieldsPopup(true);
                 }
@@ -777,9 +766,17 @@ const FormPage = () => {
                     </div>
                     <div style={{ display: 'flex', gap: 32, marginTop: 12 }}>
                         <div>
-                            <div style={{ fontWeight: 'bold', marginBottom: 6 }}>Extracted Data Fields</div>
+                            <div style={{ fontWeight: 'bold', marginBottom: 6 }}>Extracted Data Fields & Reasoning</div>
                             <ul style={{ margin: 0, padding: 0, listStyle: 'disc inside' }}>
-                                {extractedFields.length > 0 ? extractedFields.map(f => <li key={f}>{f}</li>) : <li style={{ color: '#aaa' }}>None</li>}
+                                {extractedFields && Object.keys(extractedFields).length > 0 ? (
+                                    Object.entries(extractedFields).map(([field, info]) => (
+                                        <li key={field}>
+                                            <strong>{field}:</strong> {info.value}
+                                            <br />
+                                            <span style={{ color: '#888', fontSize: '0.95em' }}><em>{info.reasoning}</em></span>
+                                        </li>
+                                    ))
+                                ) : <li style={{ color: '#aaa' }}>None</li>}
                             </ul>
                         </div>
                         <div>

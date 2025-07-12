@@ -10,7 +10,8 @@ export const resetPassword = async ({ email, newPassword }) => {
 // Fully implemented real code for frontend/src/api.js
 import axios from "axios";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5050/api";
+// Use relative URL by default for Cloudflare/prod compatibility
+const API_URL = process.env.REACT_APP_API_URL || "/api";
 
 // Create axios instance with default config
 const api = axios.create({
