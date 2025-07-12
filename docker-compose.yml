@@ -40,7 +40,7 @@ services:
     networks:
       - app-network
     volumes:
-      - ./python-app/app/ai_agent:/app/ai_agent
+      - ./python-app/app:/app
       - ./shared-evidence:/shared-evidence
 
   chroma-db:
