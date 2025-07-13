@@ -956,23 +956,49 @@ def check_form():
 
 
 
+
+@ai_agent_bp.route('/debug-rag', methods=['GET'])
+def debug_rag():
+    try:
+        # Get database status
+        if rag_db is None:
+            return jsonify({'status': 'not_loaded', 'error': 'RAG database is not loaded'})
+        # Check if the database has documents
+        db_data = rag_db.get()
+        if not db_data or 'documents' not in db_data or not db_data['documents']:
+            return jsonify({
+                'status': 'empty', 
+                'error': 'The policy knowledge base contains no documents'
+            })
+        # Return success with document count
+        return jsonify({
+            'status': 'loaded',
+            'document_count': len(db_data['documents']),
+            'embedding_type': str(type(rag_db._embedding_function)),
+            'persist_dir': rag_db._persist_directory
+        })
+    except Exception as e:
+        logging.error(f"[RAG_DEBUG] Exception in RAG endpoint: {e}", exc_info=True)
+        logging.error(f"[RAG_DEBUG] RAG DB type: {type(rag_db)}")
+        logging.error(f'[DEBUG] Error: {e}', exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
 @app.route('/')
 def home_root():
     return render_template("index.html")
-
 
 @ai_agent_bp.route('/verify-file/<filename>', methods=['GET'])
 def verify_file(filename):
     """Verify that a file exists on the server after upload."""
     docs_dir = app.config['POLICY_UPLOAD_FOLDER']
     file_path = os.path.join(docs_dir, filename)
-    
     logging.info(f"[VERIFY] Checking if file exists: {file_path}")
-    
     if os.path.exists(file_path) and os.path.isfile(file_path):
         file_size = os.path.getsize(file_path)
         last_modified = os.path.getmtime(file_path)
-        
         # Check if it's in the Chroma DB by listing all documents
         in_rag = False
         if rag_db is not None:
@@ -985,9 +1011,7 @@ def verify_file(filename):
                 logging.info(f"[VERIFY] Vector DB has {docs_count} documents")
             except Exception as e:
                 logging.error(f"[VERIFY] Error checking RAG DB: {e}", exc_info=True)
-        
         logging.info(f"[VERIFY] File exists: {file_path}, size: {file_size} bytes, in RAG: {in_rag}")
-        
         return jsonify({
             'exists': True, 
             'size': file_size,
@@ -1010,35 +1034,3 @@ for rule in app.url_map.iter_rules():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5050, debug=True)
-
-@ai_agent_bp.route('/debug-rag', methods=['GET'])
-def debug_rag():
-    try:
-        # Get database status
-        if rag_db is None:
-            return jsonify({'status': 'not_loaded', 'error': 'RAG database is not loaded'})
-            
-        # Check if the database has documents
-        db_data = rag_db.get()
-        if not db_data or 'documents' not in db_data or not db_data['documents']:
-            return jsonify({
-                'status': 'empty', 
-                'error': 'The policy knowledge base contains no documents'
-            })
-            
-        # Return success with document count
-        return jsonify({
-            'status': 'loaded',
-            'document_count': len(db_data['documents']),
-            'embedding_type': str(type(rag_db._embedding_function)),
-            'persist_dir': rag_db._persist_directory
-        })
-        
-    except Exception as e:
-        logging.error(f"[RAG_DEBUG] Exception in RAG endpoint: {e}", exc_info=True)
-        logging.error(f"[RAG_DEBUG] RAG DB type: {type(rag_db)}")
-        logging.error(f'[DEBUG] Error: {e}', exc_info=True)
-        return jsonify({
-            'status': 'error',
-            'error': str(e)
-        }), 500
