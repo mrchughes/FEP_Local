@@ -2,3 +2,22 @@ flask
 gunicorn
 boto3
 botocore
+
+# OCR dependencies
+pytesseract
+pdf2image
+pillow
+python-docx
+pypdf
+pypdf2
+docx2txt
+
+# For existing document processing and AI integration (if not already installed)
+langchain
+langchain-community
+langchain-core
+langchain-openai
+openai
+chromadb
+sentence-transformers
+transformers

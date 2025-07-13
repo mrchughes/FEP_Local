@@ -19,13 +19,20 @@ const uploadEvidence = asyncHandler(async (req, res) => {
         console.log(`[EVIDENCE] Processing file upload: ${file.name}, size: ${file.size} bytes, mimetype: ${file.mimetype}`);
         
         // Validate file type and size
-        const allowedTypes = ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/pdf', 'image/jpeg', 'image/png'];
+        const allowedTypes = [
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 
+            'application/pdf', 
+            'image/jpeg', 
+            'image/png',
+            'image/bmp',
+            'image/tiff'
+        ];
         const maxSize = 10 * 1024 * 1024; // 10MB
         
         if (!allowedTypes.includes(file.mimetype)) {
             console.error(`[EVIDENCE] Invalid file type: ${file.mimetype}`);
             res.status(400);
-            throw new Error("Invalid file type. Only DOCX, PDF, JPEG, and PNG files are allowed.");
+            throw new Error("Invalid file type. Only DOCX, PDF, JPEG, PNG, BMP, and TIFF files are allowed.");
         }
         
         if (file.size > maxSize) {

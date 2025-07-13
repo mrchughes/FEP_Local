@@ -126,30 +126,45 @@ from docx import Document
 import PyPDF2
 ai_agent_bp = Blueprint('ai_agent', __name__, url_prefix='/ai-agent')
 
+# Import OCR blueprint
+from .ocr_api import ocr_bp
+
 @ai_agent_bp.route('/extract-form-data', methods=['POST'])
 def extract_form_data():
     docs_dir = app.config['UPLOAD_FOLDER']
     logging.info(f"[EXTRACT] Scanning evidence directory: {docs_dir}")
     extracted = {}
+    
+    # Import here to avoid circular imports
+    from .document_processor import DocumentProcessor
+    
+    # Initialize document processor
+    doc_processor = DocumentProcessor(upload_folder=docs_dir)
+    
     for fname in os.listdir(docs_dir):
-        if fname.lower().endswith(('.pdf', '.docx', '.txt')):
+        # Updated to include image file extensions
+        if fname.lower().endswith(('.pdf', '.docx', '.txt', '.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff')):
             file_path = os.path.join(docs_dir, fname)
             logging.info(f"[EXTRACT] Processing file: {file_path}")
             try:
-                if fname.lower().endswith('.txt'):
-                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                        content = f.read()
-                elif fname.lower().endswith('.docx'):
-                    doc = Document(file_path)
-                    content = '\n'.join([para.text for para in doc.paragraphs])
-                elif fname.lower().endswith('.pdf'):
-                    content = ""
-                    with open(file_path, 'rb') as f:
-                        reader = PyPDF2.PdfReader(f)
-                        for page in reader.pages:
-                            content += page.extract_text() or ""
-                else:
-                    content = f"File {fname} is not a supported type."
+                # Process the document to extract text
+                result = doc_processor.process_file(file_path)
+                
+                if not result.get("success", False):
+                    logging.error(f"[EXTRACT] Failed to process file {fname}: {result.get('error', 'Unknown error')}")
+                    extracted[fname] = f"Error processing file: {result.get('error', 'Unknown error')}"
+                    continue
+                
+                # Get the extracted text
+                content = result.get("text", "")
+                
+                if not content or len(content.strip()) < 10:  # Basic check for meaningful content
+                    logging.warning(f"[EXTRACT] Insufficient text extracted from {fname}")
+                    extracted[fname] = "Error: Insufficient text could be extracted from this file"
+                    continue
+                
+                logging.info(f"[EXTRACT] Successfully extracted {len(content)} characters from {fname}")
+                
                 # Application schema summary (field: description)
                 schema = '''
 firstName: Applicant's first name
@@ -1001,6 +1016,8 @@ def verify_file(filename):
 
 # Register blueprint and log routes for debugging
 app.register_blueprint(ai_agent_bp)
+# Register OCR blueprint
+app.register_blueprint(ocr_bp)
 logging.info("[INIT] Registered ai_agent blueprint at /ai-agent")
 
 # Print all registered routes for debugging
