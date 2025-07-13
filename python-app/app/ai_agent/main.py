@@ -1,7 +1,12 @@
 from datetime import datetime
 # ...existing code...
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    print("Warning: dotenv module not found. Environment variables must be set manually.")
+    def load_dotenv():
+        pass
 import os
 import logging
 import sys
