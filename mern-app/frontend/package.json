@@ -14,7 +14,10 @@
         "build": "react-scripts build",
         "test": "react-scripts test",
         "test:coverage": "react-scripts test --coverage --watchAll=false",
-        "eject": "react-scripts eject"
+        "eject": "react-scripts eject",
+        "cypress:open": "npx cypress open",
+        "cypress:run": "npx cypress run",
+        "test:e2e": "start-server-and-test start http://localhost:3000 cypress:run"
     },
     "proxy": "http://localhost:5000",
     "browserslist": {
@@ -30,11 +33,15 @@
         ]
     },
     "devDependencies": {
+        "@cypress/webpack-preprocessor": "^5.17.1",
         "@testing-library/jest-dom": "^5.17.0",
         "@testing-library/react": "^14.2.0",
         "@testing-library/user-event": "^14.5.2",
+        "cypress": "^13.6.0",
+        "cypress-file-upload": "^5.0.8",
         "jest": "^27.5.1",
-        "msw": "^2.2.5"
+        "msw": "^2.2.5",
+        "start-server-and-test": "^2.0.0"
     },
     "jest": {
         "collectCoverageFrom": [
