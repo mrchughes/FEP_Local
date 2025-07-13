@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import os
 import logging
 import sys
+import json
 from flask import Flask, request, jsonify, render_template
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langgraph.graph import StateGraph, END
@@ -13,6 +14,10 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 from typing_extensions import TypedDict
 from langchain_community.vectorstores import Chroma
 from werkzeug.utils import secure_filename
+# OCR imports
+from .ocr_utils import process_document, clean_extracted_text
+from .document_processor import DocumentProcessor
+from .ai_document_processor import AIDocumentProcessor
 
 # Configure logging
 logging.basicConfig(
@@ -131,27 +136,78 @@ def extract_form_data():
     docs_dir = app.config['UPLOAD_FOLDER']
     logging.info(f"[EXTRACT] Scanning evidence directory: {docs_dir}")
     extracted = {}
-    for fname in os.listdir(docs_dir):
-        if fname.lower().endswith(('.pdf', '.docx', '.txt')):
-            file_path = os.path.join(docs_dir, fname)
-            logging.info(f"[EXTRACT] Processing file: {file_path}")
-            try:
-                if fname.lower().endswith('.txt'):
-                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                        content = f.read()
-                elif fname.lower().endswith('.docx'):
-                    doc = Document(file_path)
-                    content = '\n'.join([para.text for para in doc.paragraphs])
-                elif fname.lower().endswith('.pdf'):
-                    content = ""
-                    with open(file_path, 'rb') as f:
-                        reader = PyPDF2.PdfReader(f)
-                        for page in reader.pages:
-                            content += page.extract_text() or ""
-                else:
-                    content = f"File {fname} is not a supported type."
-                # Application schema summary (field: description)
-                schema = '''
+    
+    # Initialize document processor for OCR
+    document_processor = DocumentProcessor(upload_folder=docs_dir)
+    
+    # Initialize AI document processor for langchain integration
+    ai_document_processor = None
+    try:
+        ai_document_processor = AIDocumentProcessor()
+        logging.info("[EXTRACT] AI Document Processor initialized successfully")
+    except Exception as e:
+        logging.error(f"[EXTRACT] Failed to initialize AI Document Processor: {e}", exc_info=True)
+    
+    # Get the list of files from the request, if provided
+    requested_files = []
+    if request.json and 'files' in request.json:
+        requested_files = request.json.get('files', [])
+        logging.info(f"[EXTRACT] Processing requested files: {requested_files}")
+    
+    # Process all files in the directory if no specific files requested
+    file_list = requested_files if requested_files else os.listdir(docs_dir)
+    
+    for fname in file_list:
+        file_path = os.path.join(docs_dir, fname)
+        if not os.path.exists(file_path):
+            logging.warning(f"[EXTRACT] File not found: {file_path}")
+            extracted[fname] = "Error: File not found"
+            continue
+            
+        if not os.path.isfile(file_path):
+            logging.warning(f"[EXTRACT] Not a file: {file_path}")
+            continue
+            
+        logging.info(f"[EXTRACT] Processing file: {file_path}")
+        
+        try:
+            # Check file extension to determine processing method
+            _, ext = os.path.splitext(file_path)
+            ext = ext.lower()
+            
+            # Process image files with OCR
+            if ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']:
+                logging.info(f"[EXTRACT] Processing image file with OCR: {file_path}")
+                
+                # Process the file with OCR
+                ocr_result = document_processor.process_file(file_path)
+                
+                if not ocr_result.get("success", False):
+                    logging.error(f"[EXTRACT] OCR processing failed: {ocr_result.get('error')}")
+                    extracted[fname] = f"Error: OCR processing failed: {ocr_result.get('error')}"
+                    continue
+                    
+                content = ocr_result.get("text", "")
+                logging.info(f"[EXTRACT] Successfully extracted {len(content)} characters from image")
+                
+            # Process text, PDF, and DOCX files as before
+            elif ext == '.txt':
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read()
+            elif ext == '.docx':
+                doc = Document(file_path)
+                content = '\n'.join([para.text for para in doc.paragraphs])
+            elif ext == '.pdf':
+                content = ""
+                with open(file_path, 'rb') as f:
+                    reader = PyPDF2.PdfReader(f)
+                    for page in reader.pages:
+                        content += page.extract_text() or ""
+            else:
+                content = f"File {fname} is not a supported type."
+                
+            # Application schema summary (field: description)
+            schema = '''
 firstName: Applicant's first name
 lastName: Applicant's last name
 dateOfBirth: Applicant's date of birth
@@ -197,7 +253,7 @@ funeralDescription: Funeral description
 funeralContact: Funeral contact
 evidence: Evidence documents (array)
 '''
-                prompt = f'''
+            prompt = f'''
 You are an expert assistant helping to process evidence for a funeral expenses claim. The following is the application schema:
 {schema}
 
@@ -211,16 +267,16 @@ Return your answer as a JSON object where each key is a field name, and each val
 Evidence:
 {content}
 '''
-                if llm is None:
-                    logging.error(f"[EXTRACT ERROR] {fname}: LLM not initialized properly")
-                    extracted[fname] = "Error: AI model not available. Check OpenAI API key configuration."
-                else:
-                    response = llm.invoke(prompt)
-                    extracted[fname] = str(response.content) if hasattr(response, 'content') else str(response)
-                    logging.info(f"[EXTRACT] Extraction result for {fname}: {extracted[fname]}")
-            except Exception as e:
-                logging.error(f"[EXTRACT ERROR] {fname}: {e}", exc_info=True)
-                extracted[fname] = f"Error extracting: {e}"
+            if llm is None:
+                logging.error(f"[EXTRACT ERROR] {fname}: LLM not initialized properly")
+                extracted[fname] = "Error: AI model not available. Check OpenAI API key configuration."
+            else:
+                response = llm.invoke(prompt)
+                extracted[fname] = str(response.content) if hasattr(response, 'content') else str(response)
+                logging.info(f"[EXTRACT] Extraction result for {fname}: {extracted[fname]}")
+        except Exception as e:
+            logging.error(f"[EXTRACT ERROR] {fname}: {e}", exc_info=True)
+            extracted[fname] = f"Error extracting: {e}"
     return jsonify(extracted)
 
 # --- List policy documents in RAG ---
@@ -953,9 +1009,96 @@ def check_form():
         logging.error(f"[CHECK-FORM] Error: {e}", exc_info=True)
         return jsonify({"response": f"Error processing form: {str(e)}"}), 500
 
+# --- OCR API Endpoint ---
+@ai_agent_bp.route('/ocr/process', methods=['POST'])
+def process_ocr_document():
+    """Process a document with OCR and return extracted text"""
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
+        
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+        
+    # Initialize document processor
+    document_processor = DocumentProcessor(upload_folder=app.config['UPLOAD_FOLDER'])
+    
+    # Save and process the file
+    file_path = document_processor.save_uploaded_file(file)
+    if not file_path:
+        return jsonify({"error": "Failed to save file"}), 500
+        
+    # Process the document
+    result = document_processor.process_file(file_path)
+    
+    # Return the result
+    return jsonify(result)
 
-
-
+# --- Batch OCR Processing ---
+@ai_agent_bp.route('/ocr/batch', methods=['POST'])
+def batch_process_ocr_documents():
+    """Process multiple documents with OCR"""
+    if 'files' not in request.files:
+        return jsonify({"error": "No files part"}), 400
+        
+    files = request.files.getlist('files')
+    if not files or files[0].filename == '':
+        return jsonify({"error": "No selected files"}), 400
+        
+    # Initialize document processor
+    document_processor = DocumentProcessor(upload_folder=app.config['UPLOAD_FOLDER'])
+    
+    file_paths = []
+    for file in files:
+        file_path = document_processor.save_uploaded_file(file)
+        if file_path:
+            file_paths.append(file_path)
+            
+    # Process all documents
+    results = document_processor.batch_process_files(file_paths)
+    
+    # Return the results
+    return jsonify(results)
+    
+# --- AI Document Analysis ---
+@ai_agent_bp.route('/ocr/analyze', methods=['POST'])
+def analyze_ocr_document():
+    """Process a document with OCR and analyze its content with AI"""
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
+        
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+        
+    # Get custom queries if provided
+    queries = None
+    if request.form and 'queries' in request.form:
+        try:
+            queries = json.loads(request.form['queries'])
+        except Exception as e:
+            logging.error(f"[OCR] Error parsing queries: {e}", exc_info=True)
+            
+    # Initialize document processor
+    document_processor = DocumentProcessor(upload_folder=app.config['UPLOAD_FOLDER'])
+    
+    # Save the file
+    file_path = document_processor.save_uploaded_file(file)
+    if not file_path:
+        return jsonify({"error": "Failed to save file"}), 500
+        
+    try:
+        # Initialize AI document processor
+        ai_processor = AIDocumentProcessor()
+        
+        # Process and analyze the document
+        result = ai_processor.process_and_analyze_document(file_path, queries)
+        
+        # Return the analysis result
+        return jsonify(result)
+    except Exception as e:
+        logging.error(f"[OCR] Error analyzing document: {e}", exc_info=True)
+        return jsonify({"error": f"Error analyzing document: {str(e)}"}), 500
 
 @ai_agent_bp.route('/debug-rag', methods=['GET'])
 def debug_rag():
