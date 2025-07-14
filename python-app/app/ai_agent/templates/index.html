@@ -270,6 +270,8 @@
             document.getElementById('doc-list').innerHTML = '<li class="govuk-body-s">Loading documents...</li>';
             
             const url = forceReload ? '/ai-agent/docs?force_reload=true' : '/ai-agent/docs';
+            console.log(`Fetching documents with force_reload=${forceReload}`);
+            
             fetch(url)
                 .then(res => {
                     if (!res.ok) {
@@ -284,11 +286,16 @@
 
                     // Show RAG status if available
                     if (data.rag_status) {
+                        // Get the total chunk count
+                        const chunkCount = data.rag_status.total_chunk_count || 0;
+                        
                         const ragStatus = data.rag_status.initialized
-                            ? `RAG database ready (${data.rag_status.document_count} chunks)`
+                            ? `RAG database ready (${chunkCount} chunks)`
                             : 'RAG database not initialized';
 
                         const statusColor = data.rag_status.initialized ? '#00703c' : '#d4351c';
+                        
+                        console.log(`RAG status: initialized=${data.rag_status.initialized}, chunks=${chunkCount}`);
 
                         docList.innerHTML += `
                             <li class="govuk-body-s" style="border-bottom: 1px solid #b1b4b6; padding-bottom: 8px; margin-bottom: 12px;">
@@ -301,32 +308,32 @@
 
                     if (data.documents && data.documents.length > 0) {
                         data.documents.forEach(doc => {
-                            // Get details if available
-                            let size = '';
+                            // Get file details
+                            const fileName = doc.name || doc;
+                            const size = doc.size ? `(${Math.round(doc.size / 1024)} KB)` : '';
                             let lastModified = '';
-
-                            if (data.document_details) {
-                                const details = data.document_details.find(d => d.name === doc);
-                                if (details) {
-                                    size = details.size ? `(${Math.round(details.size / 1024)} KB)` : '';
-                                    if (details.last_modified) {
-                                        const date = new Date(details.last_modified * 1000);
-                                        lastModified = date.toLocaleString();
-                                    }
-                                }
+                            
+                            if (doc.last_modified) {
+                                const date = new Date(doc.last_modified * 1000);
+                                lastModified = date.toLocaleString();
                             }
+                            
+                            // Get chunk count if available
+                            const chunkCount = doc.chunk_count ? 
+                                `<div style="font-size: 12px; color: #00703c;">Chunks: ${doc.chunk_count}</div>` : '';
 
                             const li = document.createElement('li');
                             li.innerHTML = `
                                 <div class="doc-info">
-                                    <span class="doc-name">${doc}</span>
+                                    <span class="doc-name">${fileName}</span>
                                     <div class="doc-meta" style="font-size: 12px; color: #505a5f;">
                                         ${size} ${lastModified ? '<br>Modified: ' + lastModified : ''}
                                     </div>
+                                    ${chunkCount}
                                 </div>
                                 <div class="doc-actions">
-                                    <button class="govuk-button govuk-button--danger govuk-button--small remove-doc-btn" data-filename="${doc}">Remove</button>
-                                    <button class="govuk-button govuk-button--secondary govuk-button--small verify-doc-btn" data-filename="${doc}" style="margin-right: 5px;">Verify</button>
+                                    <button class="govuk-button govuk-button--danger govuk-button--small remove-doc-btn" data-filename="${fileName}">Remove</button>
+                                    <button class="govuk-button govuk-button--secondary govuk-button--small verify-doc-btn" data-filename="${fileName}" style="margin-right: 5px;">Verify</button>
                                 </div>
                             `;
                             docList.appendChild(li);
@@ -687,7 +694,7 @@
                                     } else {
                                         // Even if no filename returned, refresh docs list
                                         console.log('No filename in response, refreshing docs list anyway');
-                                        fetchDocs();
+                                        fetchDocs(true); // Always force reload after upload
                                     }
 
                                     // Reset button
