@@ -2,7 +2,7 @@ import os
 import json
 import tempfile
 from werkzeug.utils import secure_filename
-from .ocr_utils import process_document, clean_extracted_text, extract_document_metadata
+import ocr_utils
 import logging
 
 class DocumentProcessor:
@@ -33,11 +33,11 @@ class DocumentProcessor:
         try:
             logging.info(f"[OCR] Processing file: {file_path}")
             # Extract text from document
-            raw_text = process_document(file_path)
+            raw_text = ocr_utils.process_document(file_path)
             # Clean and normalize text
-            cleaned_text = clean_extracted_text(raw_text)
+            cleaned_text = ocr_utils.clean_extracted_text(raw_text)
             # Extract metadata
-            metadata = extract_document_metadata(file_path)
+            metadata = ocr_utils.extract_document_metadata(file_path)
             
             result = {
                 "success": True,

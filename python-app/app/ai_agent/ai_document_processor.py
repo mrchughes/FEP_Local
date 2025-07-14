@@ -8,11 +8,11 @@ from langchain_core.documents import Document
 from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain.chains import RetrievalQA
-from .document_processor import DocumentProcessor
+import document_processor
 
 class AIDocumentProcessor:
     def __init__(self, model_name="gpt-3.5-turbo", embedding_model="all-MiniLM-L6-v2"):
-        self.document_processor = DocumentProcessor()
+        self.document_processor = document_processor.DocumentProcessor()
         logging.info(f"[AI-OCR] Initializing AI Document Processor with model: {model_name}")
         try:
             # Initialize embedding model
