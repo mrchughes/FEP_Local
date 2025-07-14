@@ -7,6 +7,7 @@ import tempfile
 from pypdf import PdfReader
 import docx2txt
 import re
+import logging
 
 # OCR Configuration
 OCR_CONFIG = {

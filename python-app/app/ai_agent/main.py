@@ -15,9 +15,9 @@ from typing_extensions import TypedDict
 from langchain_community.vectorstores import Chroma
 from werkzeug.utils import secure_filename
 # OCR imports
-from .ocr_utils import process_document, clean_extracted_text
-from .document_processor import DocumentProcessor
-from .ai_document_processor import AIDocumentProcessor
+import ocr_utils
+import document_processor
+import ai_document_processor
 
 # Configure logging
 logging.basicConfig(
@@ -138,12 +138,12 @@ def extract_form_data():
     extracted = {}
     
     # Initialize document processor for OCR
-    document_processor = DocumentProcessor(upload_folder=docs_dir)
+    document_processor_instance = document_processor.DocumentProcessor(upload_folder=docs_dir)
     
     # Initialize AI document processor for langchain integration
-    ai_document_processor = None
+    ai_document_processor_instance = None
     try:
-        ai_document_processor = AIDocumentProcessor()
+        ai_document_processor_instance = ai_document_processor.AIDocumentProcessor()
         logging.info("[EXTRACT] AI Document Processor initialized successfully")
     except Exception as e:
         logging.error(f"[EXTRACT] Failed to initialize AI Document Processor: {e}", exc_info=True)
@@ -180,7 +180,7 @@ def extract_form_data():
                 logging.info(f"[EXTRACT] Processing image file with OCR: {file_path}")
                 
                 # Process the file with OCR
-                ocr_result = document_processor.process_file(file_path)
+                ocr_result = document_processor_instance.process_file(file_path)
                 
                 if not ocr_result.get("success", False):
                     logging.error(f"[EXTRACT] OCR processing failed: {ocr_result.get('error')}")
@@ -1021,15 +1021,15 @@ def process_ocr_document():
         return jsonify({"error": "No selected file"}), 400
         
     # Initialize document processor
-    document_processor = DocumentProcessor(upload_folder=app.config['UPLOAD_FOLDER'])
+    document_processor_instance = document_processor.DocumentProcessor(upload_folder=app.config['UPLOAD_FOLDER'])
     
     # Save and process the file
-    file_path = document_processor.save_uploaded_file(file)
+    file_path = document_processor_instance.save_uploaded_file(file)
     if not file_path:
         return jsonify({"error": "Failed to save file"}), 500
         
     # Process the document
-    result = document_processor.process_file(file_path)
+    result = document_processor_instance.process_file(file_path)
     
     # Return the result
     return jsonify(result)
@@ -1046,16 +1046,16 @@ def batch_process_ocr_documents():
         return jsonify({"error": "No selected files"}), 400
         
     # Initialize document processor
-    document_processor = DocumentProcessor(upload_folder=app.config['UPLOAD_FOLDER'])
+    document_processor_instance = document_processor.DocumentProcessor(upload_folder=app.config['UPLOAD_FOLDER'])
     
     file_paths = []
     for file in files:
-        file_path = document_processor.save_uploaded_file(file)
+        file_path = document_processor_instance.save_uploaded_file(file)
         if file_path:
             file_paths.append(file_path)
             
     # Process all documents
-    results = document_processor.batch_process_files(file_paths)
+    results = document_processor_instance.batch_process_files(file_paths)
     
     # Return the results
     return jsonify(results)
@@ -1080,16 +1080,16 @@ def analyze_ocr_document():
             logging.error(f"[OCR] Error parsing queries: {e}", exc_info=True)
             
     # Initialize document processor
-    document_processor = DocumentProcessor(upload_folder=app.config['UPLOAD_FOLDER'])
+    document_processor_instance = document_processor.DocumentProcessor(upload_folder=app.config['UPLOAD_FOLDER'])
     
     # Save the file
-    file_path = document_processor.save_uploaded_file(file)
+    file_path = document_processor_instance.save_uploaded_file(file)
     if not file_path:
         return jsonify({"error": "Failed to save file"}), 500
         
     try:
         # Initialize AI document processor
-        ai_processor = AIDocumentProcessor()
+        ai_processor = ai_document_processor.AIDocumentProcessor()
         
         # Process and analyze the document
         result = ai_processor.process_and_analyze_document(file_path, queries)
