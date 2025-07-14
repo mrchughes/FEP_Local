@@ -1064,6 +1064,30 @@ def batch_process_ocr_documents():
 @ai_agent_bp.route('/ocr/analyze', methods=['POST'])
 def analyze_ocr_document():
     """Process a document with OCR and analyze its content with AI"""
+    
+    # Support direct JSON input for text analysis
+    if request.is_json:
+        json_data = request.get_json()
+        if not json_data or 'text' not in json_data:
+            return jsonify({"error": "Missing 'text' field in JSON data"}), 400
+            
+        try:
+            # Initialize AI document processor
+            ai_processor = ai_document_processor.AIDocumentProcessor()
+            
+            # Extract info from text directly
+            result = ai_processor.analyze_text_directly(
+                json_data['text'],
+                json_data.get('document_type', 'generic'),
+                json_data.get('fields_to_extract', [])
+            )
+            
+            return jsonify(result)
+        except Exception as e:
+            logging.error(f"[OCR] Error analyzing JSON text: {e}", exc_info=True)
+            return jsonify({"error": f"Error analyzing text: {str(e)}"}), 500
+    
+    # File upload path
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
         

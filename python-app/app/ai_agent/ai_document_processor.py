@@ -8,6 +8,8 @@ from langchain_core.documents import Document
 from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain.chains import RetrievalQA
+from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
+from langchain_core.runnables import Runnable, RunnableConfig
 import document_processor
 
 class AIDocumentProcessor:
@@ -15,9 +17,9 @@ class AIDocumentProcessor:
         self.document_processor = document_processor.DocumentProcessor()
         logging.info(f"[AI-OCR] Initializing AI Document Processor with model: {model_name}")
         try:
-            # Initialize embedding model
-            self.embeddings = HuggingFaceEmbeddings(model_name=embedding_model)
-            logging.info(f"[AI-OCR] Successfully initialized embedding model: {embedding_model}")
+            # Skip the embeddings initialization for now
+            # Just create a basic text analyzer that doesn't need embeddings
+            self.embeddings = None
             
             # Initialize LLM
             self.llm = ChatOpenAI(
@@ -67,17 +69,8 @@ class AIDocumentProcessor:
             metadata=result["metadata"]
         )
         
-        # Create vector store
-        vectorstore = Chroma.from_documents(
-            documents=documents,
-            embedding=self.embeddings,
-            persist_directory=None # In-memory
-        )
-        
-        # Create retriever
-        retriever = vectorstore.as_retriever(
-            search_kwargs={"k": 5}
-        )
+        # Since we don't have embeddings, let's use a direct approach without vectorstore
+        logging.info(f"[AI-OCR] Using direct approach without vectorstore")
         
         # Run default analysis if no specific queries
         if not queries:
@@ -88,21 +81,34 @@ class AIDocumentProcessor:
                 "Extract any financial amounts or numbers from this document."
             ]
         
-        # Create QA chain
-        qa_chain = RetrievalQA.from_chain_type(
-            llm=self.llm,
-            chain_type="stuff",
-            retriever=retriever,
-            return_source_documents=True
-        )
-        
         # Run queries
         analysis_results = {}
         for query in queries:
             try:
                 logging.info(f"[AI-OCR] Running query: {query}")
-                qa_result = qa_chain({"query": query})
-                analysis_results[query] = qa_result["result"]
+                # Direct LLM approach
+                prompt = PromptTemplate.from_template(
+                    """
+                    You are an expert document analyzer.
+                    
+                    Document: {text}
+                    
+                    Answer the following question about the document:
+                    {query}
+                    """
+                )
+                
+                chain = (
+                    prompt 
+                    | self.llm 
+                    | StrOutputParser()
+                )
+                
+                result_text = chain.invoke({
+                    "text": result["text"],
+                    "query": query
+                })
+                analysis_results[query] = result_text
             except Exception as e:
                 logging.error(f"[AI-OCR] Error running query {query}: {e}", exc_info=True)
                 analysis_results[query] = f"Error: {str(e)}"
@@ -158,3 +164,80 @@ class AIDocumentProcessor:
             result["extracted_info"] = {"error": str(e)}
             
         return result
+        
+    def analyze_text_directly(self, text, document_type="generic", fields_to_extract=None):
+        """
+        Extract specific information from text directly using LLM
+        """
+        logging.info(f"[AI-OCR] Analyzing text directly, document type: {document_type}")
+        
+        # Default fields to extract based on document type
+        if not fields_to_extract:
+            if document_type == "death_certificate":
+                fields_to_extract = [
+                    "full_name", "date_of_death", "place_of_death", 
+                    "cause_of_death", "date_of_birth", "informant_name"
+                ]
+            elif document_type == "funeral_invoice":
+                fields_to_extract = [
+                    "invoice_number", "invoice_date", "total_amount",
+                    "service_provider", "recipient_name"
+                ]
+            else:
+                fields_to_extract = [
+                    "main_subject", "key_dates", "financial_amounts", 
+                    "names_mentioned", "addresses"
+                ]
+                
+        # Build extraction template
+        extraction_template = ", ".join(fields_to_extract)
+        
+        # Create prompt
+        prompt = PromptTemplate.from_template(
+            """
+            You are an expert document analyzer. Extract the following information from the document text.
+            If a piece of information is not present, return "Not found" for that field.
+            
+            Document text:
+            {text}
+            
+            Document type: {document_type}
+            
+            Information to extract:
+            {extraction_template}
+            
+            Return the extracted information in JSON format with the requested fields.
+            """
+        )
+        
+        # Create extraction chain with explicit parser
+        extraction_chain = (
+            prompt 
+            | self.llm 
+            | StrOutputParser()
+        )
+        
+        # Run extraction
+        try:
+            logging.info(f"[AI-OCR] Running extraction with template: {extraction_template}")
+            extraction_result = extraction_chain.invoke({
+                "text": text,
+                "extraction_template": extraction_template,
+                "document_type": document_type
+            })
+            
+            result = {
+                "success": True,
+                "document_type": document_type,
+                "extracted_info": extraction_result,
+                "text": text,
+                "text_length": len(text)
+            }
+            logging.info(f"[AI-OCR] Successfully extracted information")
+            return result
+        except Exception as e:
+            logging.error(f"[AI-OCR] Error extracting information: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e)
+            }

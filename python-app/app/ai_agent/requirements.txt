@@ -93,3 +93,6 @@ zstandard==0.23.0
 pytesseract
 pdf2image
 pillow
+langchain-experimental
+replicate
+tensor-parallel
