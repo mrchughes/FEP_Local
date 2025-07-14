@@ -446,25 +446,13 @@ def delete_doc(filename):
                 
                 logging.info("[DELETE] Re-ingestion completed successfully")
                 
-                # Reload the RAG database
-                try:
-                    persist_dir = os.path.join(os.path.dirname(__file__), 'chroma_db')
-                    if not os.path.exists(persist_dir):
-                        logging.error(f"[DELETE] Vector database directory not found at {persist_dir}")
-                        return jsonify({'success': False, 'error': 'File deleted but database directory not found'}), 500
-                        
-                    # Reload the database
-                    rag_db = Chroma(persist_directory=persist_dir, embedding_function=embeddings)
+                # Force reload the RAG database using our reload function
+                reload_success = force_reload_rag_database()
+                if not reload_success:
+                    logging.error(f"[DELETE] Failed to reload RAG database after deletion")
+                    return jsonify({'success': False, 'error': 'File deleted but database reload failed'}), 500
                     
-                    # Verify the database has documents
-                    db_data = rag_db.get()
-                    if not db_data or 'documents' not in db_data or not db_data['documents']:
-                        logging.warning("[DELETE] Reloaded RAG database has no documents")
-                    else:
-                        logging.info(f"[DELETE] Successfully reloaded RAG database with {len(db_data['documents'])} chunks")
-                except Exception as reload_err:
-                    logging.error(f"[DELETE] Failed to reload RAG database: {reload_err}", exc_info=True)
-                    return jsonify({'success': False, 'error': f'File deleted but database reload failed: {str(reload_err)}'}), 500
+                logging.info("[DELETE] Successfully reloaded RAG database after deletion")
         except subprocess.CalledProcessError as e:
             logging.error(f"[DELETE] Re-ingestion failed: {e.stderr}")
             return jsonify({'success': False, 'error': f'File deleted but re-ingestion failed: {e.stderr}'}), 500

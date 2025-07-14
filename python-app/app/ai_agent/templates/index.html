@@ -392,7 +392,7 @@
                 .then(data => {
                     if (data.success) {
                         showNotification('Document removed successfully', 'success');
-                        fetchDocs();
+                        fetchDocs(true); // Force reload the RAG database
                     } else {
                         showNotification('Failed to remove document: ' + (data.error || 'Unknown error'), 'error');
                         // Re-enable buttons
