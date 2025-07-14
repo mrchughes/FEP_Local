@@ -266,10 +266,11 @@
             initFileUpload();
         });
 
-        function fetchDocs() {
+        function fetchDocs(forceReload = false) {
             document.getElementById('doc-list').innerHTML = '<li class="govuk-body-s">Loading documents...</li>';
-
-            fetch('/ai-agent/docs')
+            
+            const url = forceReload ? '/ai-agent/docs?force_reload=true' : '/ai-agent/docs';
+            fetch(url)
                 .then(res => {
                     if (!res.ok) {
                         throw new Error('Network response was not ok: ' + res.status);
@@ -678,6 +679,10 @@
                                         // Add a slight delay before verification to allow backend processing to complete
                                         setTimeout(() => {
                                             verifyFileUpload(backendFilename);
+                                            // Force refresh the document list to ensure latest RAG status
+                                            setTimeout(() => {
+                                                fetchDocs(true);  // Force reload the RAG database
+                                            }, 1500);
                                         }, 1000);
                                     } else {
                                         // Even if no filename returned, refresh docs list

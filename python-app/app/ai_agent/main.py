@@ -110,6 +110,40 @@ def load_rag_database():
 rag_db = None
 load_rag_database()
 
+# Function to force a reload of the RAG database
+def force_reload_rag_database():
+    global rag_db, embeddings
+    
+    try:
+        logging.info("[RELOAD] Forcing reload of RAG database")
+        persist_dir = os.path.join(os.path.dirname(__file__), 'chroma_db')
+        
+        if not os.path.exists(persist_dir):
+            logging.warning(f"[RELOAD] RAG database directory not found at {persist_dir}")
+            return False
+            
+        # First clear the existing reference
+        rag_db = None
+        
+        # Re-initialize embeddings
+        local_embeddings = OpenAIEmbeddings(openai_api_key=openai_key)
+        
+        # Create a new instance
+        rag_db = Chroma(persist_directory=persist_dir, embedding_function=local_embeddings)
+        
+        # Verify it loaded correctly
+        db_data = rag_db.get()
+        if db_data and 'documents' in db_data:
+            doc_count = len(db_data['documents'])
+            logging.info(f"[RELOAD] Successfully reloaded RAG database with {doc_count} chunks")
+            return True
+        else:
+            logging.warning("[RELOAD] Reloaded RAG database has no documents")
+            return False
+    except Exception as e:
+        logging.error(f"[RELOAD] Error reloading RAG database: {e}", exc_info=True)
+        return False
+
 # Initialize LLM globally
 llm = ChatOpenAI(model="gpt-3.5-turbo", openai_api_key=openai_key) if openai_key else None
 if llm:
@@ -286,6 +320,12 @@ def list_docs():
     docs_dir = app.config['POLICY_UPLOAD_FOLDER']
     logging.info(f"[DOCS] Listing documents from {docs_dir}")
     
+    # Check if we need to force reload the database (e.g., after a recent upload)
+    force_reload = request.args.get('force_reload', 'false').lower() == 'true'
+    if force_reload:
+        logging.info("[DOCS] Force reload requested")
+        force_reload_rag_database()
+    
     try:
         # Ensure the directory exists
         os.makedirs(docs_dir, exist_ok=True)
@@ -311,7 +351,8 @@ def list_docs():
         
         if rag_db is not None:
             try:
-                db_data = rag_db.get()
+                # Force a fresh read of the database to avoid caching issues
+                db_data = rag_db.get(include=['documents'])
                 if db_data and 'documents' in db_data:
                     rag_status = {
                         'initialized': True,
@@ -504,13 +545,15 @@ def upload():
                 return jsonify({
                     'success': False, 
                     'error': f'Document saved but RAG database directory not found'
-                }), 500
-                
-            # Try to reload the database
+                }), 500                # Try to reload the database
             logging.info(f"[UPLOAD] Reloading RAG database from {persist_dir}")
             
             # Re-initialize embeddings to ensure they match what was used during ingestion
             local_embeddings = OpenAIEmbeddings(openai_api_key=openai_key)
+            
+            # Important: Create a new Chroma instance to avoid caching issues
+            global rag_db
+            rag_db = None  # Clear the existing reference to force reload
             rag_db = Chroma(persist_directory=persist_dir, embedding_function=local_embeddings)
             
             # Verify the database has documents
