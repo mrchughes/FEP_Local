@@ -736,6 +736,207 @@ User Question: {user_input}
 def index():
     return render_template('index.html')
 
+def guess_document_type_from_filename(filename):
+    """
+    Guess the document type based on filename patterns
+    """
+    filename = filename.lower()
+    
+    # Check for common document type keywords
+    if 'death' in filename or 'deceased' in filename:
+        return "Death Certificate"
+    elif 'funeral' in filename or 'burial' in filename:
+        return "Funeral Bill"
+    elif 'benefit' in filename or 'payment' in filename or 'allowance' in filename:
+        return "Proof of Benefits"
+    elif 'relation' in filename or 'family' in filename:
+        return "Proof of Relationship"
+    elif 'responsibility' in filename or 'respons' in filename:
+        return "Proof of Responsibility"
+    elif 'bill' in filename or 'invoice' in filename:
+        return "Bill or Invoice"
+    elif 'id' in filename or 'passport' in filename or 'license' in filename:
+        return "Identification Document"
+    else:
+        return "Unknown Document"
+
+@app.route('/ai-agent/extract-form-data', methods=['POST'])
+def extract_form_data():
+    """
+    Endpoint to extract data from evidence documents for form auto-filling
+    """
+    # Shared evidence directory
+    docs_dir = "/shared-evidence"
+    logging.info(f"[EXTRACT] Scanning evidence directory: {docs_dir}")
+    extracted = {}
+    
+    # Initialize document processor for OCR
+    document_processor_instance = document_processor.DocumentProcessor(upload_folder=docs_dir)
+    
+    # Initialize AI document processor for langchain integration
+    ai_document_processor_instance = None
+    try:
+        ai_document_processor_instance = ai_document_processor.AIDocumentProcessor()
+        logging.info("[EXTRACT] AI Document Processor initialized successfully")
+    except Exception as e:
+        logging.error(f"[EXTRACT] Failed to initialize AI Document Processor: {e}", exc_info=True)
+    
+    # Get the list of files from the request, if provided
+    requested_files = []
+    if request.json and 'files' in request.json:
+        requested_files = request.json.get('files', [])
+        logging.info(f"[EXTRACT] Processing requested files: {requested_files}")
+    
+    # Process all files in the directory if no specific files requested
+    file_list = requested_files if requested_files else os.listdir(docs_dir)
+    
+    for fname in file_list:
+        file_path = os.path.join(docs_dir, fname)
+        if not os.path.exists(file_path):
+            logging.warning(f"[EXTRACT] File not found: {file_path}")
+            extracted[fname] = "Error: File not found"
+            continue
+            
+        if not os.path.isfile(file_path):
+            logging.warning(f"[EXTRACT] Not a file: {file_path}")
+            continue
+            
+        logging.info(f"[EXTRACT] Processing file: {file_path}")
+        
+        try:
+            # Process the document using the document processor to extract text
+            processing_result = document_processor_instance.process_file(file_path)
+            
+            if not processing_result.get("success", False):
+                logging.error(f"[EXTRACT] Document processing failed: {processing_result.get('error')}")
+                extracted[fname] = f"Error: Document processing failed: {processing_result.get('error')}"
+                continue
+                
+            content = processing_result.get("text", "")
+            logging.info(f"[EXTRACT] Successfully extracted {len(content)} characters from document")
+            
+            # Check if we actually got any meaningful content
+            if not content or len(content.strip()) < 1:  # Only filter out completely empty text
+                logging.warning(f"[EXTRACT] Insufficient text content extracted from {fname}: '{content}'")
+                
+                # Return a warning in a standardized JSON format instead of an error
+                warning_result = {
+                    "_warning": {
+                        "value": "Limited or no text could be extracted from this file.",
+                        "reasoning": "The OCR process couldn't extract meaningful text from this image. This could be due to low image quality, handwritten text, or other factors."
+                    },
+                    "_fileType": {
+                        "value": guess_document_type_from_filename(fname),
+                        "reasoning": "Inferred from filename"
+                    }
+                }
+                
+                extracted[fname] = json.dumps(warning_result, indent=4)
+                continue
+            
+            # Application schema summary (field: description)
+            schema = '''
+firstName: Applicant's first name
+lastName: Applicant's last name
+dateOfBirth: Applicant's date of birth
+nationalInsuranceNumber: Applicant's National Insurance number
+addressLine1: Address line 1
+addressLine2: Address line 2
+town: Town or city
+county: County
+postcode: Postcode
+phoneNumber: Phone number
+email: Email address
+partnerFirstName: Partner's first name
+partnerLastName: Partner's last name
+partnerDateOfBirth: Partner's date of birth
+partnerNationalInsuranceNumber: Partner's National Insurance number
+partnerBenefitsReceived: Benefits the partner receives
+partnerSavings: Partner's savings
+deceasedFirstName: Deceased's first name
+deceasedLastName: Deceased's last name
+deceasedDateOfBirth: Deceased's date of birth
+deceasedDateOfDeath: Deceased's date of death
+deceasedPlaceOfDeath: Place of death
+deceasedCauseOfDeath: Cause of death
+deceasedCertifyingDoctor: Certifying doctor
+deceasedCertificateIssued: Certificate issued
+relationshipToDeceased: Relationship to deceased
+supportingEvidence: Supporting evidence
+responsibilityStatement: Responsibility statement
+responsibilityDate: Responsibility date
+benefitType: Type of benefit
+benefitReferenceNumber: Benefit reference number
+benefitLetterDate: Date on benefit letter
+householdBenefits: Household benefits (array)
+incomeSupportDetails: Details about Income Support
+disabilityBenefits: Disability benefits (array)
+carersAllowance: Carer's Allowance
+carersAllowanceDetails: Carer's Allowance details
+funeralDirector: Funeral director
+funeralEstimateNumber: Funeral estimate number
+funeralDateIssued: Date funeral estimate issued
+funeralTotalEstimatedCost: Total estimated funeral cost
+funeralDescription: Funeral description
+funeralContact: Funeral contact
+evidence: Evidence documents (array)
+'''
+            # Use LLM to extract information
+            prompt = f'''
+You are an expert assistant helping to process evidence for a funeral expenses claim. The following is the application schema:
+{schema}
+
+Read the following evidence text extracted from a document and extract all information relevant to the claim. The text comes from OCR and may be incomplete or have errors.
+
+For each field you can extract, provide:
+- The field name (from the schema above)
+- The value
+- A short explanation of your reasoning or the evidence source
+
+If a field is not directly mentioned but can be inferred, include it and explain your inference.
+
+If the text is empty or contains no relevant information, try to guess the document type (Death Certificate, Funeral Bill, Benefits Letter, etc) based on the filename and indicate any likely fields based on the document type.
+
+Filename: {fname}
+
+Return your answer as a JSON object where each key is a field name, and each value is an object with 'value' and 'reasoning'.
+
+Evidence text:
+{content}
+'''
+            # Initialize LLM if needed
+            llm = ChatOpenAI(
+                model_name="gpt-3.5-turbo",
+                temperature=0.0,
+                openai_api_key=openai_key
+            )
+            
+            try:
+                response = llm.invoke(prompt)
+                extracted[fname] = str(response.content) if hasattr(response, 'content') else str(response)
+                logging.info(f"[EXTRACT] Extraction result for {fname}: {extracted[fname]}")
+            except Exception as e:
+                logging.error(f"[EXTRACT ERROR] LLM invocation error for {fname}: {e}", exc_info=True)
+                extracted[fname] = f"Error in AI processing: {e}"
+        except Exception as e:
+            logging.error(f"[EXTRACT ERROR] {fname}: {e}", exc_info=True)
+            extracted[fname] = f"Error extracting: {e}"
+    
+    return jsonify(extracted)
+
+@app.route('/ai-agent/test-evidence', methods=['GET'])
+def test_evidence():
+    """
+    Test endpoint to check evidence directory
+    """
+    evidence_dir = "/shared-evidence"
+    result = {
+        "directory": evidence_dir,
+        "exists": os.path.exists(evidence_dir),
+        "files": os.listdir(evidence_dir) if os.path.exists(evidence_dir) else []
+    }
+    return jsonify(result)
+
 if __name__ == '__main__':
     # Load RAG database on startup
     load_rag_database()

@@ -7,18 +7,23 @@ const authRoutes = require("./routes/authRoutes");
 const formRoutes = require("./routes/formRoutes");
 const evidenceRoutes = require("./routes/evidenceRoutes");
 const aiAgentRoutes = require("./routes/aiAgentRoutes");
+const testRoutes = require("./routes/testRoutes");
 
 dotenv.config();
 
 
 const app = express();
-// Enable file upload middleware
-app.use(fileUpload());
+// Enable file upload middleware with increased file size limits
+app.use(fileUpload({
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB file size limit
+  useTempFiles: true,
+  tempFileDir: '/tmp/'
+}));
 
 // Configure CORS for Cloudflare and production
 const allowedOrigins = [
-  // 'http://localhost:3000',
-  // 'https://localhost:3000',
+  'http://localhost:3000',
+  'https://localhost:3000',
   process.env.FRONTEND_URL,
   process.env.CLOUDFLARE_URL,
   'https://your-production-domain.com', // Replace with your real domain
@@ -39,16 +44,17 @@ app.use(cors({
   credentials: true,
   optionsSuccessStatus: 200
 }));
-app.use(express.json({ limit: "10mb" })); // Prevent payload too large attacks
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(express.json({ limit: "20mb" })); // Increased limit for JSON payloads
+app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/forms", formRoutes);
 app.use("/api/evidence", evidenceRoutes);
 app.use("/api/ai-agent", aiAgentRoutes);
+app.use("/api/test", testRoutes);
 // Serve uploaded evidence files statically
 const path = require("path");
-// Fix path to uploads folder
+// Fix path to uploads folder - evidence files are now organized by user ID
 app.use("/uploads/evidence", express.static(path.join(__dirname, "uploads/evidence")));
 
 app.get("/", (req, res) => {

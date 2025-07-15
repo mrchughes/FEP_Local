@@ -1,6 +1,6 @@
 import { getAISuggestions } from "../api/aiAgent";
 import { extractFormData } from "../api/aiAgent.extract";
-import React, { useState, useContext, useEffect } from "react";
+import React, { useState, useContext, useEffect, useCallback } from "react";
 import { validatePostcode, validateNINO, validatePhoneNumber, validateEmail } from "../utils/validation";
 import { useNavigate, useSearchParams, Link, useLocation } from "react-router-dom";
 import AuthContext from "../auth/AuthContext";
@@ -11,14 +11,187 @@ import {
     saveSectionProgress,
     clearSectionProgress
 } from "../utils/formProgress";
-import { formSections } from '../data/formStructure';
+import { formSections, getConditionalFields } from '../data/formStructure';
 import { clearFormData, loadFormData, saveFormData, saveFormStep, loadFormStep } from '../utils/formPersistence';
 import ChatbotWidget from "../components/ChatbotWidget";
 import EvidenceUpload from "../components/EvidenceUpload";
-import { uploadEvidenceFile, deleteEvidenceFile } from "../api/evidence";
+import { uploadEvidenceFile, deleteEvidenceFile, getEvidenceList } from "../api/evidence";
 
 const FormPage = () => {
-    // AI suggestions state
+    // Helper to render the current section
+    const renderSection = () => {
+        const idx = currentStep - 1;
+        const section = formSections[idx];
+        if (!section) return <div className="govuk-error-message">Unknown step</div>;
+        // Special case: evidence section
+        if (section.id === 'evidence-documentation') {
+            return (
+                <>
+                    <h2 className="govuk-heading-l">{section.title}</h2>
+                    <p className="govuk-body">You can upload your documents now or come back later. By uploading now, we will extract key data and prepopulate the form for you with any extractable information.</p>
+                    <div className="govuk-form-group">
+                        <fieldset className="govuk-fieldset">
+                            <legend className="govuk-fieldset__legend">
+                                Which documents can you provide? Select all that apply.
+                            </legend>
+                            <div className="govuk-checkboxes">
+                                {section.fields[0].options.map(doc => (
+                                    <div key={doc} className="govuk-checkboxes__item">
+                                        <input
+                                            className="govuk-checkboxes__input"
+                                            id={`evidence-${doc.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}`}
+                                            name="evidence"
+                                            type="checkbox"
+                                            value={doc}
+                                            checked={formData.evidence && formData.evidence.includes(doc)}
+                                            onChange={handleChange}
+                                        />
+                                        <label className="govuk-label govuk-checkboxes__label" htmlFor={`evidence-${doc.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}`}>
+                                            {doc}
+                                        </label>
+                                    </div>
+                                ))}
+                            </div>
+                        </fieldset>
+                    </div>
+                    <EvidenceUpload
+                        onUpload={handleEvidenceUpload}
+                        onDelete={handleEvidenceDelete}
+                        evidenceList={uploadedEvidence}
+                        uploadStatus={uploadStatus}
+                    />
+                    {console.log('[DEBUG] FormPage rendering with uploadStatus:', uploadStatus)}
+                    {evidenceUploading && (
+                        <div className="govuk-inset-text" aria-live="polite">
+                            <p className="govuk-body">
+                                <strong>Processing documents...</strong> Please wait while we upload and analyze your files.
+                            </p>
+                        </div>
+                    )}
+                    {evidenceError && (
+                        <div className="govuk-error-message" id="evidence-error" role="alert" aria-live="assertive">
+                            <span className="govuk-visually-hidden">Error:</span> {evidenceError}
+                        </div>
+                    )}
+                    {evidenceWarning && (
+                        <div className="govuk-warning-message" id="evidence-warning" role="status" aria-live="polite" style={{ color: '#594d00', backgroundColor: '#fff7bf', padding: '15px', marginBottom: '15px', border: '1px solid #ffdd00' }}>
+                            <span className="govuk-visually-hidden">Warning:</span> {evidenceWarning}
+                        </div>
+                    )}
+                    {aiLoading && <p className="govuk-body">Getting AI suggestions...</p>}
+                    {aiError && <p className="govuk-error-message">{aiError}</p>}
+                    {aiSuggestions && (
+                        <div className="govuk-inset-text govuk-inset-text--suggested" style={{ borderLeft: '5px solid #ffbf47', background: '#fffbe6' }}>
+                            <strong>Suggested by AI:</strong>
+                            <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#6f777b' }}>suggested: {aiSuggestions}</pre>
+                            <p className="govuk-hint">You can edit or overwrite these suggestions.</p>
+                        </div>
+                    )}
+                    <div className="govuk-inset-text">
+                        <p className="govuk-body">You can upload your documents now or after submitting this application.</p>
+                    </div>
+                </>
+            );
+        }
+        // Default: render fields for this section
+        // Get the conditional visibility map for all fields
+        const conditionalFields = getConditionalFields(formData);
+        console.log('[FORM] Conditional fields for section:', section.title, conditionalFields);
+        return (
+            <>
+                <h2 className="govuk-heading-l">{section.title}</h2>
+                {section.fields.map(field => {
+                    // Skip rendering if conditional check fails
+                    if (field.conditional && conditionalFields[field.name] === false) {
+                        console.log('[FORM] Skipping conditional field:', field.name);
+                        return null;
+                    }
+                    // Render input based on field type (simplified for demo)
+                    if (field.type === 'text' || field.type === 'date' || field.type === 'number' || field.type === 'email' || field.type === 'tel') {
+                        return (
+                            <div className="govuk-form-group" key={field.name}>
+                                <label className="govuk-label" htmlFor={field.name}>{field.label}</label>
+                                <input
+                                    className="govuk-input"
+                                    id={field.name}
+                                    name={field.name}
+                                    type={field.type}
+                                    value={formData[field.name] || ''}
+                                    onChange={handleChange}
+                                />
+                            </div>
+                        );
+                    }
+                    if (field.type === 'checkbox') {
+                        return (
+                            <div className="govuk-form-group" key={field.name}>
+                                <fieldset className="govuk-fieldset">
+                                    <legend className="govuk-fieldset__legend">{field.label}</legend>
+                                    <div className="govuk-checkboxes">
+                                        {field.options.map(opt => (
+                                            <div key={opt} className="govuk-checkboxes__item">
+                                                <input
+                                                    className="govuk-checkboxes__input"
+                                                    id={`${field.name}-${opt.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}`}
+                                                    name={field.name}
+                                                    type="checkbox"
+                                                    value={opt}
+                                                    checked={Array.isArray(formData[field.name]) && formData[field.name].includes(opt)}
+                                                    onChange={handleChange}
+                                                />
+                                                <label className="govuk-label govuk-checkboxes__label" htmlFor={`${field.name}-${opt.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}`}>{opt}</label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </fieldset>
+                            </div>
+                        );
+                    }
+                    if (field.type === 'radio') {
+                        return (
+                            <div className="govuk-form-group" key={field.name}>
+                                <fieldset className="govuk-fieldset">
+                                    <legend className="govuk-fieldset__legend">{field.label}</legend>
+                                    <div className="govuk-radios">
+                                        {field.options.map(opt => (
+                                            <div key={opt} className="govuk-radios__item">
+                                                <input
+                                                    className="govuk-radios__input"
+                                                    id={`${field.name}-${opt.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}`}
+                                                    name={field.name}
+                                                    type="radio"
+                                                    value={opt}
+                                                    checked={formData[field.name] === opt}
+                                                    onChange={handleChange}
+                                                />
+                                                <label className="govuk-label govuk-radios__label" htmlFor={`${field.name}-${opt.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}`}>{opt}</label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </fieldset>
+                            </div>
+                        );
+                    }
+                    if (field.type === 'textarea') {
+                        return (
+                            <div className="govuk-form-group" key={field.name}>
+                                <label className="govuk-label" htmlFor={field.name}>{field.label}</label>
+                                <textarea
+                                    className="govuk-textarea"
+                                    id={field.name}
+                                    name={field.name}
+                                    value={formData[field.name] || ''}
+                                    onChange={handleChange}
+                                />
+                            </div>
+                        );
+                    }
+                    return null;
+                })}
+            </>
+        );
+    };
+    // --- All hooks at the top for strict React rules compliance ---
     const [aiSuggestions, setAISuggestions] = useState("");
     const [aiLoading, setAILoading] = useState(false);
     const [aiError, setAIError] = useState("");
@@ -26,20 +199,67 @@ const FormPage = () => {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const location = useLocation();
-    // For evidence upload
     const [uploadedEvidence, setUploadedEvidence] = useState([]); // [{name, url}]
     const [evidenceUploading, setEvidenceUploading] = useState(false);
     const [evidenceError, setEvidenceError] = useState("");
-    // Popup state for updated fields after ingest
+    const [evidenceWarning, setEvidenceWarning] = useState("");
+    const [uploadStatus, setUploadStatus] = useState({}); // {filename: {progress, state}}
     const [showUpdatedFieldsPopup, setShowUpdatedFieldsPopup] = useState(false);
     const [updatedFields, setUpdatedFields] = useState([]); // Form fields updated
     const [extractedFields, setExtractedFields] = useState([]); // Data fields extracted from files
+    // Initial state values - will be updated in useEffect
+    // (moved to top)
+    const [errors, setErrors] = useState({});
+    const [loading, setLoading] = useState(false);
+    const [isLoadingData, setIsLoadingData] = useState(true);
+
+    // --- All useEffect and useCallback hooks next ---
+    // Initialize form step based on URL params and saved data
+    useEffect(() => {
+        const initializeStep = () => {
+            const stepParam = searchParams.get('step');
+            const freshParam = searchParams.get('fresh');
+
+            // If coming with step parameter (from Review page), use it immediately
+            if (stepParam && !isNaN(parseInt(stepParam))) {
+                console.log('📝 FormPage: Using step from URL (initial):', stepParam);
+                return parseInt(stepParam);
+            }
+
+            // If fresh=true parameter, always start at step 1 (new application)
+            if (freshParam === 'true') {
+                console.log('📝 FormPage: Fresh application, clearing data and starting at step 1');
+                // Clear localStorage for fresh applications
+                if (user?.email) {
+                    clearFormData(user?.email);
+                    clearSectionProgress(user?.email);
+                }
+                return 1;
+            }
+
+            // For continuing applications, check if there's actual form progress
+            const savedFormData = loadFormData(user?.email, {});
+            const hasActualProgress = hasAnyProgress(savedFormData, formSections);
+
+            if (hasActualProgress) {
+                const savedStep = loadFormStep(user?.email) || 1;
+                console.log('📝 FormPage: Has progress, using saved step:', savedStep);
+                return savedStep;
+            } else {
+                console.log('📝 FormPage: No progress, starting at step 1');
+                return 1;
+            }
+        };
+        const initialStep = initializeStep();
+        setCurrentStep(initialStep);
+    }, [searchParams, user?.email]);
 
     // Mapping from AI-extracted keys to form field keys
     const aiToFormFieldMap = {
         // Deceased details
         "Name of deceased": "deceasedFirstName", // Will split into first/last below
         "Date of death": "deceasedDateOfDeath",
+        "deceasedDateOfDeath": "deceasedDateOfDeath", // Direct field match
         "Place of death": "deceasedPlaceOfDeath",
         "Cause of death": "deceasedCauseOfDeath",
         "Certifying doctor": "deceasedCertifyingDoctor",
@@ -51,23 +271,38 @@ const FormPage = () => {
         "Address": "addressLine1", // Will split if possible
         // Funeral bill
         "Funeral Director": "funeralDirector",
+        "funeralDirector": "funeralDirector", // Direct field match
         "Estimate number": "funeralEstimateNumber",
+        "funeralEstimateNumber": "funeralEstimateNumber", // Direct field match
         "Date issued": "funeralDateIssued",
+        "funeralDateIssued": "funeralDateIssued", // Direct field match
         "Total estimated cost": "funeralTotalEstimatedCost",
+        "funeralTotalEstimatedCost": "funeralTotalEstimatedCost", // Direct field match
+        "Total cost": "funeralTotalEstimatedCost", // Alternative key
+        "Cost": "funeralTotalEstimatedCost", // Alternative key
         "Description": "funeralDescription",
+        "funeralDescription": "funeralDescription", // Direct field match
         "Contact": "funeralContact",
+        "funeralContact": "funeralContact", // Direct field match
         // Relationship
         "Relationship": "relationshipToDeceased",
+        "relationshipToDeceased": "relationshipToDeceased", // Direct field match
         "Supporting evidence": "supportingEvidence",
+        "supportingEvidence": "supportingEvidence", // Direct field match
         // Responsibility
         "Applicant": "firstName", // Will split into first/last below
         "Relationship to deceased": "relationshipToDeceased",
         "Statement": "responsibilityStatement",
+        "responsibilityStatement": "responsibilityStatement", // Direct field match
         "Date": "responsibilityDate",
+        "responsibilityDate": "responsibilityDate", // Direct field match
         // Benefits
         "Benefit": "benefitType",
+        "benefitType": "benefitType", // Direct field match
         "Reference number": "benefitReferenceNumber",
+        "benefitReferenceNumber": "benefitReferenceNumber", // Direct field match
         "Letter date": "benefitLetterDate",
+        "benefitLetterDate": "benefitLetterDate", // Direct field match
         // Specific benefits
         "Income Support": "householdBenefits",
         "Jobseeker's Allowance": "householdBenefits",
@@ -88,144 +323,305 @@ const FormPage = () => {
     }
 
     // Handler for evidence upload
-    const handleEvidenceUpload = (files) => {
+    const handleEvidenceUpload = async (files) => {
         console.log('[EVIDENCE] handleEvidenceUpload called with files:', files);
         setEvidenceError("");
+        setEvidenceWarning("");
         setEvidenceUploading(true);
-        const uploadAll = Array.from(files).map(async (file) => {
-            try {
-                const res = await uploadEvidenceFile(file, user?.token);
-                setUploadedEvidence(prev => [...prev, { name: res.name, url: res.url }]);
-            } catch (err) {
-                setEvidenceError(`Failed to upload ${file.name}`);
-            }
+        
+        // Create a new status object instead of modifying the existing one
+        const filesList = Array.from(files);
+        
+        // Initialize an object to track all file statuses - directly modify this instead of using React state
+        // as React state updates may be batched and not immediately available
+        const statusTracker = {...uploadStatus}; // Clone the current state
+        
+        console.log('[EVIDENCE] Current upload status before update:', uploadStatus);
+        
+        // Add all files to the list with 0% progress
+        filesList.forEach(file => {
+            // Add to the evidence list if not already there
+            setUploadedEvidence(prev => [...prev.filter(f => f.name !== file.name), { name: file.name }]);
+            
+            // Set initial upload status
+            statusTracker[file.name] = { progress: 0, state: 'uploading' };
         });
-        Promise.all(uploadAll).then(async (uploadResults) => {
-            console.log('[EVIDENCE] All uploads complete, uploadResults:', uploadResults);
-            // After all evidence is uploaded, call AI extraction
-            try {
-                const result = await extractFormData(user?.token);
-                console.log('[EVIDENCE] AI extraction result:', result);
-
-                // Check if result has expected format
-                if (!result || !result.extracted) {
-                    console.error('[EVIDENCE] Invalid extraction result format:', result);
-                    setEvidenceError("AI extraction returned invalid data format");
-                    return;
-                }
-
-                // result.extracted is an object: { filename: extractedJsonString }
-                let merged = { ...formData };
-                let changedFields = [];
-                let extractedFieldInfo = {};
-                let extractedFieldNames = new Set();
-                Object.entries(result.extracted || {}).forEach(([filename, val]) => {
-                    console.log(`[EVIDENCE] Processing extraction from ${filename}:`, val);
-                    try {
-                        let obj;
-                        try {
-                            // Handle string vs object response
-                            obj = typeof val === 'string' ? JSON.parse(val) : val;
-                        } catch (parseErr) {
-                            console.error(`[EVIDENCE] Failed to parse JSON from ${filename}:`, parseErr);
-                            console.error(`[EVIDENCE] Raw value:`, val);
-                            return;
-                        }
-                        Object.entries(obj).forEach(([k, v]) => {
-                            // v is expected to be { value, reasoning }
-                            if (!v || !v.value) {
-                                console.log(`[EVIDENCE] Skipping empty value for field: ${k}`);
-                                return;
-                            }
-                            let mappedKey = aiToFormFieldMap[k] || k;
-                            if (!aiToFormFieldMap[k]) {
-                                const lowerK = k.toLowerCase();
-                                const ciMatch = Object.keys(aiToFormFieldMap).find(
-                                    key => key.toLowerCase() === lowerK
-                                );
-                                if (ciMatch) mappedKey = aiToFormFieldMap[ciMatch];
-                            }
-                            extractedFieldInfo[mappedKey] = { value: v.value, reasoning: v.reasoning };
-                            extractedFieldNames.add(mappedKey);
-                            // Special handling for names
-                            if (["Name of deceased", "Name of applicant", "Claimant", "Applicant"].includes(k)) {
-                                const { firstName, lastName } = splitName(v.value);
-                                if (k === "Name of deceased") {
-                                    if (merged.deceasedFirstName !== firstName) changedFields.push("deceasedFirstName");
-                                    if (merged.deceasedLastName !== lastName) changedFields.push("deceasedLastName");
-                                    merged.deceasedFirstName = firstName;
-                                    merged.deceasedLastName = lastName;
-                                } else {
-                                    if (merged.firstName !== firstName) changedFields.push("firstName");
-                                    if (merged.lastName !== lastName) changedFields.push("lastName");
-                                    merged.firstName = firstName;
-                                    merged.lastName = lastName;
-                                }
-                            } else if (k === "Address") {
-                                const addressParts = v.value.split(',').map(part => part.trim());
-                                if (addressParts.length === 3) {
-                                    merged.addressLine1 = addressParts[0];
-                                    merged.town = addressParts[1];
-                                    merged.postcode = addressParts[2];
-                                    changedFields.push("addressLine1", "town", "postcode");
-                                } else if (addressParts.length === 2) {
-                                    merged.addressLine1 = addressParts[0];
-                                    merged.postcode = addressParts[1];
-                                    changedFields.push("addressLine1", "postcode");
-                                } else {
-                                    merged.addressLine1 = v.value;
-                                    changedFields.push("addressLine1");
-                                }
-                            } else if (["Income Support", "Jobseeker's Allowance", "Employment and Support Allowance", "Universal Credit", "Pension Credit"].includes(k)) {
-                                if (!Array.isArray(merged.householdBenefits)) merged.householdBenefits = [];
-                                if (!merged.householdBenefits.includes(k)) {
-                                    merged.householdBenefits.push(k);
-                                    changedFields.push("householdBenefits");
-                                }
-                            } else if (["Benefit details", "Income Support details"].includes(k)) {
-                                if (merged[mappedKey] !== v.value) changedFields.push(mappedKey);
-                                merged[mappedKey] = v.value;
-                            } else {
-                                if (merged[mappedKey] !== v.value) changedFields.push(mappedKey);
-                                merged[mappedKey] = v.value;
-                            }
-                        });
-                    } catch (e) {
-                        // If not valid JSON, skip
-                    }
-                });
-                console.log('[AI->FORM] Merged formData after mapping:', merged);
+        
+        // Update the state in one batch
+        setUploadStatus({...statusTracker});
+        console.log('[EVIDENCE] Initial status tracker:', statusTracker);
+        console.log('[EVIDENCE] Initial status state set:', {...statusTracker});
+        
+        // Process files sequentially - one at a time
+        try {
+            for (const file of filesList) {
                 try {
-                    window.localStorage.setItem('debug_lastMergedFormData', JSON.stringify(merged));
-                } catch (e) { }
-                setFormData(merged);
-                // Persist extracted data to backend for first-time ingest
-                if ((extractedFieldNames.size > 0 || changedFields.length > 0) && user?.token) {
-                    try {
-                        console.log('[AI->FORM][DEBUG] About to call autoSaveForm with:', merged);
-                        const saveResp = await autoSaveForm(merged, user.token);
-                        console.log('[AI->FORM][DEBUG] autoSaveForm response:', saveResp);
-                        console.log('[AI->FORM] Successfully saved extracted data to backend');
-                    } catch (err) {
-                        // Optionally show error to user
-                        console.error('[AI->FORM][DEBUG] autoSaveForm error:', err);
-                        console.warn('Failed to persist extracted data:', err);
+                    console.log(`[EVIDENCE] Processing file ${file.name} sequentially`);
+                    
+                    // STEP 1: Upload the file
+                    // Track progress for this file
+                    const handleProgress = (percent, filename) => {
+                        console.log(`[EVIDENCE] Progress update for ${filename}: ${percent}%`);
+                        
+                        // Update our status tracker
+                        statusTracker[filename] = { progress: percent, state: 'uploading' };
+                        
+                        // Update React state with the current state of statusTracker
+                        setUploadStatus({...statusTracker});
+                        
+                        console.log(`[EVIDENCE] Updated upload status for ${filename}:`, 
+                            JSON.stringify({...statusTracker}));
+                    };
+                    
+                    // Upload the file
+                    console.log(`[EVIDENCE] Starting upload for ${file.name}`);
+                    const res = await uploadEvidenceFile(file, user?.token, handleProgress);
+                    
+                    // Mark as complete in our tracker
+                    statusTracker[file.name] = { progress: 100, state: 'complete' };
+                    setUploadStatus({...statusTracker});
+                    
+                    console.log(`[EVIDENCE] File upload complete for ${file.name}, new status:`, 
+                        JSON.stringify(statusTracker[file.name]));
+                    
+                    // Update evidence list with URL
+                    setUploadedEvidence(prev => 
+                        prev.map(item => 
+                            item.name === res.name 
+                                ? { ...item, url: res.url } 
+                                : item
+                        )
+                    );
+                    
+                    // STEP 2: Extract data from this file
+                    console.log(`[EVIDENCE] Starting extraction for ${file.name}`);
+                    
+                    // Update status to extracting for this file
+                    statusTracker[file.name] = { progress: 100, state: 'extracting' };
+                    setUploadStatus({...statusTracker});
+                    console.log(`[EVIDENCE] Updated status to extracting for ${file.name}:`, 
+                        JSON.stringify(statusTracker[file.name]));
+                    
+                    // Call AI extraction just for this file
+                    const result = await extractFormData(user?.token);
+                    console.log(`[EVIDENCE] AI extraction result for ${file.name}:`, result);
+                    
+                    // Check if result has expected format
+                    if (!result || !result.extracted) {
+                        console.error(`[EVIDENCE] Invalid extraction result format for ${file.name}:`, result);
+                        setEvidenceError(`AI extraction returned invalid data format for ${file.name}`);
+                        
+                        // Mark failed extraction in status
+                        statusTracker[file.name] = { progress: 100, state: 'extraction-failed' };
+                        setUploadStatus({...statusTracker});
+                        
+                        continue; // Skip to next file
                     }
+                    
+                    // STEP 3: Process the extracted data
+                    // result.extracted is an object: { filename: extractedJsonString }
+                    let merged = { ...formData };
+                    let changedFields = [];
+                    let extractedFieldInfo = {};
+                    let extractedFieldNames = new Set();
+                    
+                    // Process extraction result for the current file
+                    if (result.extracted[file.name]) {
+                        const val = result.extracted[file.name];
+                        console.log(`[EVIDENCE] Processing extraction from ${file.name}:`, val);
+                        
+                        try {
+                            let obj;
+                            try {
+                                // Handle string vs object response
+                                obj = typeof val === 'string' ? JSON.parse(val) : val;
+                            } catch (parseErr) {
+                                console.error(`[EVIDENCE] Failed to parse JSON from ${file.name}:`, parseErr);
+                                console.error(`[EVIDENCE] Raw value:`, val);
+                                
+                                // Continue with next file if we can't parse this one
+                                statusTracker[file.name] = { progress: 100, state: 'extraction-failed' };
+                                setUploadStatus({...statusTracker});
+                                continue;
+                            }
+                            
+                            Object.entries(obj).forEach(([k, v]) => {
+                                // v is expected to be { value, reasoning }
+                                if (!v || !v.value) {
+                                    console.log(`[EVIDENCE] Skipping empty value for field: ${k}`);
+                                    return;
+                                }
+                                
+                                let mappedKey = aiToFormFieldMap[k] || k;
+                                if (!aiToFormFieldMap[k]) {
+                                    const lowerK = k.toLowerCase();
+                                    const ciMatch = Object.keys(aiToFormFieldMap).find(
+                                        key => key.toLowerCase() === lowerK
+                                    );
+                                    if (ciMatch) mappedKey = aiToFormFieldMap[ciMatch];
+                                }
+                                
+                                extractedFieldInfo[mappedKey] = { value: v.value, reasoning: v.reasoning };
+                                extractedFieldNames.add(mappedKey);
+                                
+                                // Special handling for names
+                                if (["Name of deceased", "Name of applicant", "Claimant", "Applicant"].includes(k)) {
+                                    const { firstName, lastName } = splitName(v.value);
+                                    if (k === "Name of deceased") {
+                                        if (merged.deceasedFirstName !== firstName) changedFields.push("deceasedFirstName");
+                                        if (merged.deceasedLastName !== lastName) changedFields.push("deceasedLastName");
+                                        merged.deceasedFirstName = firstName;
+                                        merged.deceasedLastName = lastName;
+                                    } else {
+                                        if (merged.firstName !== firstName) changedFields.push("firstName");
+                                        if (merged.lastName !== lastName) changedFields.push("lastName");
+                                        merged.firstName = firstName;
+                                        merged.lastName = lastName;
+                                    }
+                                } else if (k === "Address") {
+                                    const addressParts = v.value.split(',').map(part => part.trim());
+                                    if (addressParts.length === 3) {
+                                        merged.addressLine1 = addressParts[0];
+                                        merged.town = addressParts[1];
+                                        merged.postcode = addressParts[2];
+                                        changedFields.push("addressLine1", "town", "postcode");
+                                    } else if (addressParts.length === 2) {
+                                        merged.addressLine1 = addressParts[0];
+                                        merged.postcode = addressParts[1];
+                                        changedFields.push("addressLine1", "postcode");
+                                    } else {
+                                        merged.addressLine1 = v.value;
+                                        changedFields.push("addressLine1");
+                                    }
+                                } else if (["Income Support", "Jobseeker's Allowance", "Employment and Support Allowance", "Universal Credit", "Pension Credit"].includes(k)) {
+                                    if (!Array.isArray(merged.householdBenefits)) merged.householdBenefits = [];
+                                    if (!merged.householdBenefits.includes(k)) {
+                                        merged.householdBenefits.push(k);
+                                        changedFields.push("householdBenefits");
+                                    }
+                                } else if (["Benefit details", "Income Support details"].includes(k)) {
+                                    if (merged[mappedKey] !== v.value) changedFields.push(mappedKey);
+                                    merged[mappedKey] = v.value;
+                                } else if (mappedKey === "funeralTotalEstimatedCost") {
+                                    // Special handling for funeral cost - ensure we keep only the numeric part
+                                    let costValue = v.value;
+                                    // Remove currency symbols, commas, and extract the number
+                                    const costMatch = costValue.toString().replace(/[£$,]/g, '').match(/(\d+(\.\d+)?)/);
+                                    if (costMatch && costMatch[1]) {
+                                        costValue = costMatch[1];
+                                        console.log(`[EVIDENCE] Extracted funeral cost: ${costValue} from ${v.value}`);
+                                    }
+                                    if (merged[mappedKey] !== costValue) changedFields.push(mappedKey);
+                                    merged[mappedKey] = costValue;
+                                } else if (["deceasedDateOfDeath", "funeralDateIssued", "benefitLetterDate", "responsibilityDate"].includes(mappedKey)) {
+                                    // Special handling for date fields
+                                    let dateValue = v.value;
+                                    // Check if date is in a recognizable format and convert if needed
+                                    const dateMatch = dateValue.toString().match(/(\d{1,2})[\/\-\s](\d{1,2}|[A-Za-z]+)[\/\-\s](\d{2,4})/);
+                                    if (dateMatch) {
+                                        console.log(`[EVIDENCE] Found date format in ${dateValue}: ${dateMatch[0]}`);
+                                        // Just store the matched date string - conversion can happen in UI
+                                    }
+                                    if (merged[mappedKey] !== dateValue) changedFields.push(mappedKey);
+                                    merged[mappedKey] = dateValue;
+                                } else {
+                                    if (merged[mappedKey] !== v.value) changedFields.push(mappedKey);
+                                    merged[mappedKey] = v.value;
+                                }
+                            });
+                        } catch (e) {
+                            console.error(`[EVIDENCE] Error processing extraction for ${file.name}:`, e);
+                            // If error in processing, continue with next file
+                            statusTracker[file.name] = { progress: 100, state: 'extraction-failed' };
+                            setUploadStatus({...statusTracker});
+                            continue;
+                        }
+                    } else {
+                        console.log(`[EVIDENCE] No extraction data found for ${file.name}`);
+                        
+                        // Check if it contains the "No relevant data found" error
+                        if (result.extracted[file.name] && typeof result.extracted[file.name] === 'string' && 
+                            result.extracted[file.name].includes("No relevant data found")) {
+                            
+                            // Set a warning instead of an error
+                            setEvidenceWarning(`Limited text could be extracted from ${file.name}. The file was uploaded successfully, but we couldn't automatically fill any form fields.`);
+                            
+                            // Mark as successful upload with warning
+                            statusTracker[file.name] = { progress: 100, state: 'extraction-limited' };
+                            setUploadStatus({...statusTracker});
+                        }
+                    }
+                    
+                    console.log(`[AI->FORM] Merged formData after mapping for ${file.name}:`, merged);
+                    
+                    try {
+                        window.localStorage.setItem('debug_lastMergedFormData', JSON.stringify(merged));
+                    } catch (e) { 
+                        console.error('[AI->FORM] Failed to store debug data:', e);
+                    }
+                    
+                    // Update form data with merged values
+                    setFormData(merged);
+                    
+                    // Persist extracted data to backend for first-time ingest
+                    if ((extractedFieldNames.size > 0 || changedFields.length > 0) && user?.token) {
+                        try {
+                            console.log(`[AI->FORM][DEBUG] About to call autoSaveForm with data from ${file.name}:`, merged);
+                            const saveResp = await autoSaveForm(merged, user.token);
+                            console.log('[AI->FORM][DEBUG] autoSaveForm response:', saveResp);
+                            console.log(`[AI->FORM] Successfully saved extracted data from ${file.name} to backend`);
+                        } catch (err) {
+                            console.error('[AI->FORM][DEBUG] autoSaveForm error:', err);
+                            console.warn(`Failed to persist extracted data from ${file.name}:`, err);
+                        }
+                    }
+                    
+                    // Show popup with field updates if we have any
+                    if (Object.keys(extractedFieldInfo).length > 0 || changedFields.length > 0) {
+                        console.log(`[AI->FORM][POPUP] changedFields from ${file.name}:`, changedFields, 'merged:', merged);
+                        setExtractedFields(extractedFieldInfo);
+                        setUpdatedFields(changedFields);
+                        setShowUpdatedFieldsPopup(true);
+                    } else {
+                        console.log(`[AI->FORM] No fields were extracted or changed from ${file.name}`);
+                        // Set warning but don't treat as error - the file was uploaded successfully
+                        // Just not able to extract useful data
+                        setEvidenceWarning(`No relevant data could be extracted from ${file.name}. The file was uploaded successfully.`);
+                    }
+                    
+                    // Update status to show processed successfully
+                    statusTracker[file.name] = { progress: 100, state: 'processed' };
+                    setUploadStatus({...statusTracker});
+                    console.log(`[EVIDENCE] Updated status to processed for ${file.name}:`, JSON.stringify(statusTracker[file.name]));
+                    
+                } catch (err) {
+                    console.error(`[EVIDENCE] Processing failed for ${file.name}:`, err);
+                    
+                    // Determine a more specific error message if possible
+                    let errorMessage = `Failed to process ${file.name}`;
+                    if (err.message?.includes('size')) {
+                        errorMessage = `File ${file.name} exceeds the maximum allowed size (25MB)`;
+                    } else if (err.message?.includes('type') || err.message?.includes('extension')) {
+                        errorMessage = `File type for ${file.name} is not supported. Use PDF, JPG, PNG, or DOCX.`;
+                    }
+                    
+                    setEvidenceError(errorMessage);
+                    
+                    // Mark as error in our tracker
+                    statusTracker[file.name] = { progress: 0, state: 'error' };
+                    setUploadStatus({...statusTracker});
+                    
+                    console.log(`[EVIDENCE] File processing failed for ${file.name}, new status:`, 
+                        JSON.stringify(statusTracker[file.name]));
                 }
-                if (Object.keys(extractedFieldInfo).length > 0 || changedFields.length > 0) {
-                    console.log('[AI->FORM][POPUP] changedFields:', changedFields, 'merged:', merged);
-                    setExtractedFields(extractedFieldInfo);
-                    setUpdatedFields(changedFields);
-                    setShowUpdatedFieldsPopup(true);
-                } else {
-                    console.log('[AI->FORM] No fields were extracted or changed');
-                    setEvidenceError("No relevant data found in uploaded documents");
-                }
-            } catch (e) {
-                console.error('[EVIDENCE] AI extraction error:', e);
-                setEvidenceError(`AI extraction failed: ${e.message || "Unknown error"}`);
             }
-        }).finally(() => setEvidenceUploading(false));
+        } catch (err) {
+            console.error('[EVIDENCE] Unexpected error in upload process:', err);
+            setEvidenceError('An unexpected error occurred during the upload process.');
+        } finally {
+            // Always turn off the uploading state when done
+            setEvidenceUploading(false);
+        }
     };
 
     // Handler for evidence delete
@@ -233,7 +629,15 @@ const FormPage = () => {
         setEvidenceError("");
         setEvidenceUploading(true);
         deleteEvidenceFile(filename, user?.token)
-            .then(() => setUploadedEvidence(prev => prev.filter(f => f.name !== filename)))
+            .then(() => {
+                setUploadedEvidence(prev => prev.filter(f => f.name !== filename));
+                // Also remove the file from the upload status
+                setUploadStatus(prev => {
+                    const newStatus = { ...prev };
+                    delete newStatus[filename];
+                    return newStatus;
+                });
+            })
             .catch(() => setEvidenceError(`Failed to delete ${filename}`))
             .finally(() => setEvidenceUploading(false));
     };
@@ -332,47 +736,95 @@ const FormPage = () => {
         notifyChanges: false
     };
 
-    // Get step from URL params or determine appropriate starting step
-    const getInitialStep = () => {
-        const stepParam = searchParams.get('step');
-        const freshParam = searchParams.get('fresh');
-
-        // If coming with step parameter (from Review page), use it immediately
-        if (stepParam && !isNaN(parseInt(stepParam))) {
-            console.log('📝 FormPage: Using step from URL (initial):', stepParam);
-            return parseInt(stepParam);
-        }
-
-        // If fresh=true parameter, always start at step 1 (new application)
-        if (freshParam === 'true') {
-            console.log('📝 FormPage: Fresh application, clearing data and starting at step 1');
-            // Immediately clear localStorage for fresh applications
-            if (user?.email) {
-                clearFormData(user?.email);
-                clearSectionProgress(user?.email);
-            }
-            return 1;
-        }
-
-        // For continuing applications, check if there's actual form progress
-        const savedFormData = loadFormData(user?.email, {});
-        const hasActualProgress = hasAnyProgress(savedFormData, formSections);
-
-        if (hasActualProgress) {
-            const savedStep = loadFormStep(user?.email) || 1;
-            console.log('📝 FormPage: Has progress, using saved step:', savedStep);
-            return savedStep;
-        } else {
-            console.log('📝 FormPage: No progress, starting at step 1');
-            return 1;
-        }
-    };
-
-    const [currentStep, setCurrentStep] = useState(getInitialStep);
+    // Initial state values - will be updated in useEffect
+    const [currentStep, setCurrentStep] = useState(1);
     const [formData, setFormData] = useState(defaultFormData);
-    const [errors, setErrors] = useState({});
-    const [loading, setLoading] = useState(false);
-    const [isLoadingData, setIsLoadingData] = useState(true);
+    
+    // Initialize form step based on URL params and saved data
+    useEffect(() => {
+        const initializeStep = () => {
+            const stepParam = searchParams.get('step');
+            const freshParam = searchParams.get('fresh');
+
+            // If coming with step parameter (from Review page), use it immediately
+            if (stepParam && !isNaN(parseInt(stepParam))) {
+                console.log('📝 FormPage: Using step from URL (initial):', stepParam);
+                return parseInt(stepParam);
+            }
+
+            // If fresh=true parameter, always start at step 1 (new application)
+            if (freshParam === 'true') {
+                console.log('📝 FormPage: Fresh application, clearing data and starting at step 1');
+                // Clear localStorage for fresh applications
+                if (user?.email) {
+                    clearFormData(user?.email);
+                    clearSectionProgress(user?.email);
+                }
+                return 1;
+            }
+
+            // For continuing applications, check if there's actual form progress
+            const savedFormData = loadFormData(user?.email, {});
+            const hasActualProgress = hasAnyProgress(savedFormData, formSections);
+
+            if (hasActualProgress) {
+                const savedStep = loadFormStep(user?.email) || 1;
+                console.log('📝 FormPage: Has progress, using saved step:', savedStep);
+                return savedStep;
+            } else {
+                console.log('📝 FormPage: No progress, starting at step 1');
+                return 1;
+            }
+        };
+        
+        const initialStep = initializeStep();
+        setCurrentStep(initialStep);
+    }, [searchParams, user?.email]);
+    // (moved to top)
+
+    // Function to load previously uploaded evidence
+    const loadEvidenceList = useCallback(async () => {
+        if (!user?.token) return;
+        
+        try {
+            console.log('[EVIDENCE] Loading evidence list');
+            const files = await getEvidenceList(user.token);
+            
+            if (files && files.length > 0) {
+                console.log(`[EVIDENCE] Loaded ${files.length} evidence files`);
+                
+                // Create status entries for all files
+                const newStatus = {};
+                files.forEach(file => {
+                    newStatus[file.name] = { progress: 100, state: 'complete' };
+                });
+                
+                setUploadedEvidence(files);
+                setUploadStatus(newStatus);
+            } else {
+                console.log('[EVIDENCE] No evidence files found');
+                setUploadedEvidence([]);
+            }
+        } catch (error) {
+            console.error('[EVIDENCE] Error loading evidence list:', error);
+            setEvidenceError('Failed to load previously uploaded evidence. Please try again.');
+        }
+    }, [user?.token]);
+
+    // Load evidence when visiting the evidence page
+    useEffect(() => {
+        const currentSection = formSections[currentStep];
+        if (currentSection && currentSection.id === 'evidence-documentation') {
+            loadEvidenceList();
+        }
+    }, [currentStep, loadEvidenceList, formSections]);
+
+    // Also load evidence on initial component mount
+    useEffect(() => {
+        if (user?.token) {
+            loadEvidenceList();
+        }
+    }, [user?.token, loadEvidenceList]);
 
     // On first entry to evidence step, fetch AI suggestions if evidence exists and not already fetched
     useEffect(() => {
@@ -657,19 +1109,17 @@ const FormPage = () => {
         return Object.keys(stepErrors).length === 0;
     };
 
-    const handleNext = () => {
+    const handleNext = async () => {
         if (validateStep(currentStep)) {
             // Check if we came from the review page
             const returnTo = searchParams.get('returnTo');
 
             if (returnTo === 'review') {
-                // Auto-save to database before returning to review
-                autoSaveToDatabase();
+                await autoSaveToDatabase();
                 console.log('📝 FormPage: Returning to review page after saving section');
                 navigate("/review");
             } else if (currentStep < 13) {
-                // Normal progression to next step
-                autoSaveToDatabase();
+                await autoSaveToDatabase();
                 setCurrentStep(currentStep + 1);
             }
         }
@@ -695,9 +1145,15 @@ const FormPage = () => {
         // Don't auto-save if we're still loading initial data or user not authenticated
         if (!user?.token || isLoadingData) return;
 
+        // If on evidence section, include uploaded evidence files in formData
+        let dataToSave = { ...formData };
+        if (formSections[currentStep - 1]?.id === 'evidence-documentation') {
+            dataToSave.evidenceFiles = uploadedEvidence.map(f => f.name);
+        }
+
         try {
-            await autoSaveForm(formData, user.token);
-            console.log('Form auto-saved to database');
+            await autoSaveForm(dataToSave, user.token);
+            console.log('Form auto-saved to database', dataToSave);
             // Do NOT update section/task completion here. Only update on explicit user save/submit.
         } catch (error) {
             console.warn('Auto-save to database failed:', error.message);
@@ -727,32 +1183,41 @@ const FormPage = () => {
         }
     };
 
+    // Handle sign out action
+    const handleSignOut = (e) => {
+        e.preventDefault();
+        if (window.confirm('Are you sure you want to sign out? Unsaved changes may be lost.')) {
+            window.localStorage.removeItem('user');
+            window.location.href = '/';
+        }
+    };
+
     const hasErrors = Object.keys(errors).length > 0;
 
-    // Show loading state while fetching data from database
-    if (isLoadingData) {
-        return (
-            <div className="govuk-width-container">
-                <main className="govuk-main-wrapper" id="main-content" role="main">
-                    <div className="govuk-grid-row">
-                        <div className="govuk-grid-column-two-thirds">
-                            <h1 className="govuk-heading-xl">Loading your application...</h1>
-                            <p className="govuk-body">Please wait while we retrieve your saved progress.</p>
-                        </div>
-                    </div>
-                </main>
-            </div>
-        );
-    }
-
+    // The component's JSX
+    // We'll only use a conditional render inside the main return statement
+    // instead of having an early return that would violate React hooks rules
     return (
         <>
-            {showUpdatedFieldsPopup && (
-                <div style={{
-                    position: 'fixed',
-                    top: 30,
-                    right: 30,
-                    zIndex: 9999,
+            {isLoadingData ? (
+                <div className="govuk-width-container">
+                    <main className="govuk-main-wrapper" id="main-content" role="main">
+                        <div className="govuk-grid-row">
+                            <div className="govuk-grid-column-two-thirds">
+                                <h1 className="govuk-heading-xl">Loading your application...</h1>
+                                <p className="govuk-body">Please wait while we retrieve your saved progress.</p>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            ) : (
+                <>
+                    {showUpdatedFieldsPopup && (
+                        <div style={{
+                            position: 'fixed',
+                            top: 30,
+                            right: 30,
+                            zIndex: 9999,
                     background: '#222',
                     color: '#fff',
                     padding: '18px 28px',
@@ -830,153 +1295,7 @@ const FormPage = () => {
 
                             <form>
                                 {/* Dynamically render the correct section based on formSections */}
-                                {(() => {
-                                    const idx = currentStep - 1;
-                                    const section = formSections[idx];
-                                    if (!section) return <div className="govuk-error-message">Unknown step</div>;
-                                    // Special case: evidence section
-                                    if (section.id === 'evidence-documentation') {
-                                        return (
-                                            <>
-                                                <h2 className="govuk-heading-l">{section.title}</h2>
-                                                <p className="govuk-body">You can upload your documents now or come back later. By uploading now, we will extract key data and prepopulate the form for you with any extractable information.</p>
-                                                <div className="govuk-form-group">
-                                                    <fieldset className="govuk-fieldset">
-                                                        <legend className="govuk-fieldset__legend">
-                                                            Which documents can you provide? Select all that apply.
-                                                        </legend>
-                                                        <div className="govuk-checkboxes">
-                                                            {section.fields[0].options.map(doc => (
-                                                                <div key={doc} className="govuk-checkboxes__item">
-                                                                    <input
-                                                                        className="govuk-checkboxes__input"
-                                                                        id={`evidence-${doc.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}`}
-                                                                        name="evidence"
-                                                                        type="checkbox"
-                                                                        value={doc}
-                                                                        checked={formData.evidence && formData.evidence.includes(doc)}
-                                                                        onChange={handleChange}
-                                                                    />
-                                                                    <label className="govuk-label govuk-checkboxes__label" htmlFor={`evidence-${doc.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}`}>
-                                                                        {doc}
-                                                                    </label>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </fieldset>
-                                                </div>
-                                                <EvidenceUpload
-                                                    onUpload={handleEvidenceUpload}
-                                                    onDelete={handleEvidenceDelete}
-                                                    evidenceList={uploadedEvidence}
-                                                />
-                                                {evidenceUploading && <p className="govuk-body">Uploading...</p>}
-                                                {evidenceError && <p className="govuk-error-message">{evidenceError}</p>}
-                                                {aiLoading && <p className="govuk-body">Getting AI suggestions...</p>}
-                                                {aiError && <p className="govuk-error-message">{aiError}</p>}
-                                                {aiSuggestions && (
-                                                    <div className="govuk-inset-text govuk-inset-text--suggested" style={{ borderLeft: '5px solid #ffbf47', background: '#fffbe6' }}>
-                                                        <strong>Suggested by AI:</strong>
-                                                        <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#6f777b' }}>suggested: {aiSuggestions}</pre>
-                                                        <p className="govuk-hint">You can edit or overwrite these suggestions.</p>
-                                                    </div>
-                                                )}
-                                                <div className="govuk-inset-text">
-                                                    <p className="govuk-body">You can upload your documents now or after submitting this application.</p>
-                                                </div>
-                                            </>
-                                        );
-                                    }
-                                    // Default: render fields for this section
-                                    return (
-                                        <>
-                                            <h2 className="govuk-heading-l">{section.title}</h2>
-                                            {section.fields.map(field => {
-                                                // Render input based on field type (simplified for demo)
-                                                if (field.type === 'text' || field.type === 'date' || field.type === 'number' || field.type === 'email' || field.type === 'tel') {
-                                                    return (
-                                                        <div className="govuk-form-group" key={field.name}>
-                                                            <label className="govuk-label" htmlFor={field.name}>{field.label}</label>
-                                                            <input
-                                                                className="govuk-input"
-                                                                id={field.name}
-                                                                name={field.name}
-                                                                type={field.type}
-                                                                value={formData[field.name] || ''}
-                                                                onChange={handleChange}
-                                                            />
-                                                        </div>
-                                                    );
-                                                }
-                                                if (field.type === 'checkbox') {
-                                                    return (
-                                                        <div className="govuk-form-group" key={field.name}>
-                                                            <fieldset className="govuk-fieldset">
-                                                                <legend className="govuk-fieldset__legend">{field.label}</legend>
-                                                                <div className="govuk-checkboxes">
-                                                                    {field.options.map(opt => (
-                                                                        <div key={opt} className="govuk-checkboxes__item">
-                                                                            <input
-                                                                                className="govuk-checkboxes__input"
-                                                                                id={`${field.name}-${opt.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}`}
-                                                                                name={field.name}
-                                                                                type="checkbox"
-                                                                                value={opt}
-                                                                                checked={Array.isArray(formData[field.name]) && formData[field.name].includes(opt)}
-                                                                                onChange={handleChange}
-                                                                            />
-                                                                            <label className="govuk-label govuk-checkboxes__label" htmlFor={`${field.name}-${opt.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}`}>{opt}</label>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </fieldset>
-                                                        </div>
-                                                    );
-                                                }
-                                                if (field.type === 'radio') {
-                                                    return (
-                                                        <div className="govuk-form-group" key={field.name}>
-                                                            <fieldset className="govuk-fieldset">
-                                                                <legend className="govuk-fieldset__legend">{field.label}</legend>
-                                                                <div className="govuk-radios">
-                                                                    {field.options.map(opt => (
-                                                                        <div key={opt} className="govuk-radios__item">
-                                                                            <input
-                                                                                className="govuk-radios__input"
-                                                                                id={`${field.name}-${opt.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}`}
-                                                                                name={field.name}
-                                                                                type="radio"
-                                                                                value={opt}
-                                                                                checked={formData[field.name] === opt}
-                                                                                onChange={handleChange}
-                                                                            />
-                                                                            <label className="govuk-label govuk-radios__label" htmlFor={`${field.name}-${opt.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}`}>{opt}</label>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </fieldset>
-                                                        </div>
-                                                    );
-                                                }
-                                                if (field.type === 'textarea') {
-                                                    return (
-                                                        <div className="govuk-form-group" key={field.name}>
-                                                            <label className="govuk-label" htmlFor={field.name}>{field.label}</label>
-                                                            <textarea
-                                                                className="govuk-textarea"
-                                                                id={field.name}
-                                                                name={field.name}
-                                                                value={formData[field.name] || ''}
-                                                                onChange={handleChange}
-                                                            />
-                                                        </div>
-                                                    );
-                                                }
-                                                return null;
-                                            })}
-                                        </>
-                                    );
-                                })()}
+                                {renderSection()}
 
                                 <div className="govuk-button-group">
                                     {currentStep < 13 && (
@@ -1023,13 +1342,7 @@ const FormPage = () => {
                                     href="/"
                                     className="govuk-link dashboard-signout-link"
                                     style={{ marginLeft: 'auto' }}
-                                    onClick={e => {
-                                        e.preventDefault();
-                                        if (window.confirm('Are you sure you want to sign out? Unsaved changes may be lost.')) {
-                                            window.localStorage.removeItem('user');
-                                            window.location.href = '/';
-                                        }
-                                    }}
+                                    onClick={handleSignOut}
                                 >
                                     Sign out
                                 </a>
@@ -1039,6 +1352,8 @@ const FormPage = () => {
                     </div> {/* end govuk-grid-row */}
                 </main>
             </div>
+                </>
+            )}
         </>
     );
 };

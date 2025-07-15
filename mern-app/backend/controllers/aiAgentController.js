@@ -16,17 +16,8 @@ function syncEvidenceToAIAgent() {
         return;
     }
 
-    const files = fs.readdirSync(EVIDENCE_UPLOADS);
-    for (const file of files) {
-        const src = path.join(EVIDENCE_UPLOADS, file);
-        const dest = path.join(AI_AGENT_DOCS, file);
-        try {
-            fs.copyFileSync(src, dest);
-            console.log(`[SYNC] Copied evidence file ${src} to shared volume ${dest}`);
-        } catch (err) {
-            console.error(`[SYNC ERROR] Failed to copy ${src} to ${dest}:`, err.message);
-        }
-    }
+    // User-specific evidence is already being copied to shared directory during upload
+    console.log(`[SYNC] Evidence sync not required. Files are copied to shared directory during upload.`);
 }
 
 // POST /api/ai-agent/suggest

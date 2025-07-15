@@ -4,31 +4,44 @@ const User = require("../models/User");
 
 // Connect to MongoDB if not already connected
 if (!mongoose.connection.readyState) {
+  console.log('[DB] Connecting to MongoDB...');
+  console.log(`[DB] MONGODB_URI exists: ${Boolean(process.env.MONGODB_URI)}`);
+  console.log(`[DB] MONGODB_URI length: ${process.env.MONGODB_URI ? process.env.MONGODB_URI.length : 0}`);
+  
   mongoose.connect(process.env.MONGODB_URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
+  }).then(() => {
+    console.log('[DB] MongoDB connected successfully');
+  }).catch(err => {
+    console.error('[DB] MongoDB connection error:', err);
   });
 }
 
 const createUser = async (user) => {
   try {
+    console.log(`[DB] Creating user with email: ${user.email}`);
     const newUser = new User({
       email: user.email,
       name: user.name,
       password: user.password,
     });
     await newUser.save();
+    console.log(`[DB] User created successfully: ${user.email}`);
   } catch (error) {
-    console.error("Error creating user:", error);
+    console.error("[DB] Error creating user:", error);
     throw new Error("Failed to create user");
   }
 };
 
 const findUserByEmail = async (email) => {
   try {
-    return await User.findOne({ email });
+    console.log(`[DB] Finding user by email: ${email}`);
+    const user = await User.findOne({ email });
+    console.log(`[DB] User found: ${user ? 'Yes' : 'No'}`);
+    return user;
   } catch (error) {
-    console.error("Error finding user:", error);
+    console.error("[DB] Error finding user:", error);
     throw new Error("Failed to find user");
   }
 };

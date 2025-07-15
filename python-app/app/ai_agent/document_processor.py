@@ -29,16 +29,27 @@ class DocumentProcessor:
         """
         if not os.path.exists(file_path):
             logging.error(f"[OCR] File not found: {file_path}")
-            return {"error": "File not found"}
+            return {"success": False, "error": "File not found"}
         try:
             logging.info(f"[OCR] Processing file: {file_path}")
             # Extract text from document
             raw_text = ocr_utils.process_document(file_path)
+            
+            # Check if the result is an error message string
+            if isinstance(raw_text, str) and raw_text.startswith("Error"):
+                logging.error(f"[OCR] Processing error: {raw_text}")
+                return {"success": False, "error": raw_text}
+                
             # Clean and normalize text
             cleaned_text = ocr_utils.clean_extracted_text(raw_text)
             # Extract metadata
             metadata = ocr_utils.extract_document_metadata(file_path)
             
+            # Log the results for debugging
+            logging.info(f"[OCR] Raw text length: {len(raw_text)}, Cleaned text length: {len(cleaned_text)}")
+            if len(cleaned_text) > 0:
+                logging.info(f"[OCR] Sample of cleaned text: {cleaned_text[:100]}...")
+                
             result = {
                 "success": True,
                 "metadata": metadata,
@@ -48,6 +59,12 @@ class DocumentProcessor:
             
             logging.info(f"[OCR] Successfully processed file: {file_path}, text length: {len(cleaned_text)}")
             return result
+        except Exception as e:
+            logging.error(f"[OCR] Error processing file {file_path}: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e)
+            }
         except Exception as e:
             logging.error(f"[OCR] Error processing file {file_path}: {e}", exc_info=True)
             return {

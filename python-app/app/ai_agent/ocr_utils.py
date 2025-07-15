@@ -26,9 +26,22 @@ def preprocess_image(image):
     # Convert to grayscale
     if image.mode != 'L':
         image = image.convert('L')
-    # Enhance contrast using adaptive thresholding or other methods
-    # This is a simple threshold, but more advanced methods can be used
-    # image = image.point(lambda x: 0 if x < 128 else 255, '1')
+    
+    # Enhance contrast - this helps with scanned documents
+    from PIL import ImageEnhance
+    enhancer = ImageEnhance.Contrast(image)
+    image = enhancer.enhance(2.0)  # Increase contrast
+    
+    # Sharpen the image to make text more defined
+    from PIL import ImageFilter
+    image = image.filter(ImageFilter.SHARPEN)
+    
+    # Resize image if too small
+    if image.width < 1000 or image.height < 1000:
+        ratio = max(1000/image.width, 1000/image.height)
+        new_size = (int(image.width * ratio), int(image.height * ratio))
+        image = image.resize(new_size, Image.LANCZOS)
+        
     return image
 
 def extract_text_from_image(image_path):
@@ -36,13 +49,64 @@ def extract_text_from_image(image_path):
     Extract text from an image file using OCR
     """
     try:
+        logging.info(f"[OCR] Processing image file: {image_path}")
         image = Image.open(image_path)
-        image = preprocess_image(image)
-        # Apply OCR with custom configuration
-        text = pytesseract.image_to_string(image, lang=OCR_CONFIG['lang'], config=custom_config)
-        return text
+        
+        # Get image details for logging
+        logging.info(f"[OCR] Image size: {image.size}, mode: {image.mode}, format: {image.format}")
+        
+        # Preprocess the image for better OCR results
+        processed_image = preprocess_image(image)
+        
+        # Try multiple OCR configurations for better results
+        configs = [
+            custom_config,
+            '--psm 4 --oem 3',  # Assume a single column of text
+            '--psm 3 --oem 3',  # Fully automatic page segmentation
+            '--psm 12 --oem 3'  # Sparse text with OSD
+        ]
+        
+        best_text = ""
+        
+        # Try the default config first
+        try:
+            default_text = pytesseract.image_to_string(processed_image, lang=OCR_CONFIG['lang'])
+            if default_text:
+                best_text = default_text
+                logging.info(f"[OCR] Default configuration extracted {len(default_text)} chars")
+        except Exception as e:
+            logging.warning(f"[OCR] Default extraction failed: {e}")
+        
+        # Try alternative configurations if default didn't produce good results
+        if len(best_text.strip()) < 50:
+            for config in configs:
+                try:
+                    text = pytesseract.image_to_string(processed_image, lang=OCR_CONFIG['lang'], config=config)
+                    logging.info(f"[OCR] Config {config[:10]}... extracted {len(text)} chars")
+                    
+                    # Choose the configuration that extracts the most text
+                    if len(text) > len(best_text):
+                        best_text = text
+                except Exception as inner_e:
+                    logging.error(f"[OCR] Error with config {config}: {inner_e}")
+                    continue
+        
+        if not best_text:
+            logging.warning(f"[OCR] No text extracted from image {image_path}")
+            
+        # Clean the extracted text
+        best_text = clean_extracted_text(best_text)
+        
+        # Log the result
+        if len(best_text) > 0:
+            logging.info(f"[OCR] Successfully processed file: {image_path}, text length: {len(best_text)}")
+            logging.info(f"[OCR] Sample of extracted text: {best_text[:100]}...")
+        else:
+            logging.warning(f"[OCR] No usable text extracted from image: {image_path}")
+            
+        return best_text
     except Exception as e:
-        print(f"Error extracting text from image: {e}")
+        logging.error(f"[OCR] Error extracting text from image: {e}", exc_info=True)
         return ""
 
 def extract_text_from_pdf(pdf_path):
@@ -103,16 +167,68 @@ def process_document(file_path):
     """
     Process a document file based on its extension
     """
-    _, ext = os.path.splitext(file_path)
-    ext = ext.lower()
-    if ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']:
-        return extract_text_from_image(file_path)
-    elif ext == '.pdf':
-        return extract_text_from_pdf(file_path)
-    elif ext in ['.docx', '.doc']:
-        return extract_text_from_docx(file_path)
-    else:
-        return f"Unsupported file format: {ext}"
+    try:
+        _, ext = os.path.splitext(file_path)
+        ext = ext.lower()
+        logging.info(f"[OCR] Processing file {file_path} with extension {ext}")
+        
+        # Extract text based on file type
+        if ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']:
+            text = extract_text_from_image(file_path)
+            logging.info(f"[OCR] Extracted {len(text)} characters from image")
+        elif ext == '.pdf':
+            text = extract_text_from_pdf(file_path)
+            logging.info(f"[OCR] Extracted {len(text)} characters from PDF")
+        elif ext in ['.docx', '.doc']:
+            text = extract_text_from_docx(file_path)
+            logging.info(f"[OCR] Extracted {len(text)} characters from DOCX")
+        elif ext in ['.txt', '.text']:
+            # Handle plain text files directly
+            with open(file_path, 'r', errors='ignore') as f:
+                text = f.read()
+            logging.info(f"[OCR] Read {len(text)} characters from text file")
+        else:
+            logging.warning(f"[OCR] Unsupported file type: {ext}")
+            return f"Unsupported file format: {ext}"
+            
+        # If very little text was extracted, try alternative methods
+        if len(text.strip()) < 50:
+            logging.warning(f"[OCR] Very little text extracted from {file_path}, trying alternative methods")
+            
+            # For all file types, try converting to image and processing
+            if ext == '.pdf':
+                try:
+                    # Convert first page to image and retry
+                    images = pdf_image_conversion(file_path)
+                    if images:
+                        backup_text = extract_text_from_image(images[0])
+                        if len(backup_text) > len(text):
+                            text = backup_text
+                            logging.info(f"[OCR] Used image conversion for PDF, got {len(text)} chars")
+                except Exception as backup_err:
+                    logging.error(f"[OCR] Backup extraction failed: {backup_err}")
+            elif ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']:
+                # For images, try with different preprocessing
+                try:
+                    # Load the image directly without preprocessing
+                    image = Image.open(file_path)
+                    direct_text = pytesseract.image_to_string(image, lang=OCR_CONFIG['lang'])
+                    if len(direct_text) > len(text):
+                        text = direct_text
+                        logging.info(f"[OCR] Used direct image OCR, got {len(text)} chars")
+                except Exception as img_err:
+                    logging.error(f"[OCR] Alternative image OCR failed: {img_err}")
+        
+        # Log a sample of the extracted text for debugging
+        if text:
+            logging.info(f"[OCR] Sample of extracted text: {text[:100]}...")
+        else:
+            logging.warning(f"[OCR] No text was extracted from {file_path}")
+            
+        return text
+    except Exception as e:
+        logging.error(f"[OCR] Error processing document: {e}", exc_info=True)
+        return f"Error processing document: {str(e)}"
 
 def clean_extracted_text(text):
     """
@@ -120,11 +236,21 @@ def clean_extracted_text(text):
     """
     if not text:
         return ""
-    # Remove excessive whitespace
-    text = re.sub(r'\s+', ' ', text)
-    # Remove unusual characters and normalize
+        
+    # Convert to string if not already
+    if not isinstance(text, str):
+        text = str(text)
+        
+    # Remove excessive whitespace but preserve line breaks for structure
+    text = re.sub(r' {2,}', ' ', text)  # Multiple spaces to single space
+    text = re.sub(r'\n{3,}', '\n\n', text)  # Multiple newlines to double newline
+    
+    # Remove unusual characters but keep more symbols that might be important
     text = re.sub(r'[^\x00-\x7F]+', ' ', text)
-    # Other cleaning steps as needed
+    
+    # Log cleaning results
+    logging.info(f"[OCR] Text cleaning: before {len(text) if text else 0} chars, after {len(text.strip()) if text else 0} chars")
+    
     return text.strip()
 
 def extract_document_metadata(file_path):

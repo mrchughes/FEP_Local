@@ -298,25 +298,6 @@ export const formSections = [
     ]
   },
   {
-    id: 'evidence-documentation',
-    title: 'Evidence and documentation',
-    fields: [
-      {
-        name: 'evidence',
-        label: 'Documents you can provide',
-        type: 'checkbox',
-        options: [
-          'Death certificate',
-          'Funeral bill or estimate',
-          'Proof of benefits',
-          'Proof of relationship to deceased',
-          'Proof of responsibility for funeral'
-        ],
-        required: true
-      }
-    ]
-  },
-  {
     id: 'declaration',
     title: 'Declaration',
     fields: [
@@ -354,8 +335,11 @@ export const getConditionalFields = (formData) => {
         if (Array.isArray(formData[condField])) {
           conditionalFields[field.name] = formData[condField]?.includes(condValue) || false;
         } else {
-          // Regular string-based conditions
-          conditionalFields[field.name] = formData[condField] === condValue;
+          // Case-insensitive comparison for string values
+          conditionalFields[field.name] = 
+            typeof formData[condField] === 'string' && 
+            typeof condValue === 'string' &&
+            formData[condField]?.toLowerCase() === condValue.toLowerCase();
         }
       } else {
         // Show all non-conditional fields by default

@@ -47,23 +47,38 @@ const registerUser = asyncHandler(async (req, res) => {
 const loginUser = asyncHandler(async (req, res) => {
     const { email, password } = req.body;
 
+    // Add debug logging
+    console.log(`[AUTH] Login attempt for email: ${email}`);
+
     // Input validation
     if (!email || !password) {
+        console.log(`[AUTH] Missing email or password`);
         res.status(400);
         throw new Error("Please provide email and password");
     }
 
     const user = await findUserByEmail(email.toLowerCase());
     if (!user) {
+        console.log(`[AUTH] User not found: ${email.toLowerCase()}`);
         res.status(401);
         throw new Error("Invalid email or password");
     }
 
+    console.log(`[AUTH] User found: ${user.email}`);
+    console.log(`[AUTH] Stored password hash length: ${user.password.length}`);
+
     const isMatch = await bcrypt.compare(password, user.password);
+    console.log(`[AUTH] Password match result: ${isMatch}`);
+    
     if (!isMatch) {
+        console.log(`[AUTH] Password mismatch for user: ${user.email}`);
         res.status(401);
         throw new Error("Invalid email or password");
     }
+
+    // Generate token
+    const token = generateToken(user.email);
+    console.log(`[AUTH] Generated token length: ${token.length}`);
 
     res.json({
         name: user.name,

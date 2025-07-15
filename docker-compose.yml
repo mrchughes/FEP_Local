@@ -15,6 +15,13 @@ services:
     volumes:
       - ./mern-app/backend/uploads:/uploads
       - ./shared-evidence:/shared-evidence
+    environment:
+      - NODE_ENV=development
+      - PORT=5200
+      - MONGODB_URI=mongodb+srv://fepuser:FepTest123@devconnector.jmwb0ez.mongodb.net/FEP?retryWrites=true&w=majority&appName=DevConnector
+      - FRONTEND_URL=https://fep.mrchughes.site
+      - JWT_SECRET=secure_jwt_secret_for_authentication_token
+      - AI_AGENT_URL=http://ai-agent:5050
 
   frontend:
     build:
