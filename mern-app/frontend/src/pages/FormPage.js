@@ -204,6 +204,7 @@ const FormPage = () => {
     const [evidenceError, setEvidenceError] = useState("");
     const [evidenceWarning, setEvidenceWarning] = useState("");
     const [uploadStatus, setUploadStatus] = useState({}); // {filename: {progress, state}}
+    const [processingFiles, setProcessingFiles] = useState(false); // Whether files are being processed by AI
     const [showUpdatedFieldsPopup, setShowUpdatedFieldsPopup] = useState(false);
     const [updatedFields, setUpdatedFields] = useState([]); // Form fields updated
     const [extractedFields, setExtractedFields] = useState([]); // Data fields extracted from files
@@ -328,108 +329,113 @@ const FormPage = () => {
         setEvidenceError("");
         setEvidenceWarning("");
         setEvidenceUploading(true);
-        
+        setProcessingFiles(true); // Set processing state
+
         // Create a new status object instead of modifying the existing one
         const filesList = Array.from(files);
-        
+
         // Initialize an object to track all file statuses - directly modify this instead of using React state
         // as React state updates may be batched and not immediately available
-        const statusTracker = {...uploadStatus}; // Clone the current state
-        
+        const statusTracker = { ...uploadStatus }; // Clone the current state
+
         console.log('[EVIDENCE] Current upload status before update:', uploadStatus);
-        
+
         // Add all files to the list with 0% progress
         filesList.forEach(file => {
             // Add to the evidence list if not already there
             setUploadedEvidence(prev => [...prev.filter(f => f.name !== file.name), { name: file.name }]);
-            
+
             // Set initial upload status
             statusTracker[file.name] = { progress: 0, state: 'uploading' };
         });
-        
+
         // Update the state in one batch
-        setUploadStatus({...statusTracker});
+        setUploadStatus({ ...statusTracker });
         console.log('[EVIDENCE] Initial status tracker:', statusTracker);
-        console.log('[EVIDENCE] Initial status state set:', {...statusTracker});
-        
+        console.log('[EVIDENCE] Initial status state set:', { ...statusTracker });
+
         // Process files sequentially - one at a time
         try {
             for (const file of filesList) {
                 try {
                     console.log(`[EVIDENCE] Processing file ${file.name} sequentially`);
-                    
+
                     // STEP 1: Upload the file
                     // Track progress for this file
                     const handleProgress = (percent, filename) => {
                         console.log(`[EVIDENCE] Progress update for ${filename}: ${percent}%`);
-                        
+
                         // Update our status tracker
                         statusTracker[filename] = { progress: percent, state: 'uploading' };
-                        
+
                         // Update React state with the current state of statusTracker
-                        setUploadStatus({...statusTracker});
-                        
-                        console.log(`[EVIDENCE] Updated upload status for ${filename}:`, 
-                            JSON.stringify({...statusTracker}));
+                        setUploadStatus({ ...statusTracker });
+
+                        console.log(`[EVIDENCE] Updated upload status for ${filename}:`,
+                            JSON.stringify({ ...statusTracker }));
                     };
-                    
+
                     // Upload the file
                     console.log(`[EVIDENCE] Starting upload for ${file.name}`);
                     const res = await uploadEvidenceFile(file, user?.token, handleProgress);
-                    
+
                     // Mark as complete in our tracker
                     statusTracker[file.name] = { progress: 100, state: 'complete' };
-                    setUploadStatus({...statusTracker});
-                    
-                    console.log(`[EVIDENCE] File upload complete for ${file.name}, new status:`, 
+                    setUploadStatus({ ...statusTracker });
+
+                    console.log(`[EVIDENCE] File upload complete for ${file.name}, new status:`,
                         JSON.stringify(statusTracker[file.name]));
-                    
+
                     // Update evidence list with URL
-                    setUploadedEvidence(prev => 
-                        prev.map(item => 
-                            item.name === res.name 
-                                ? { ...item, url: res.url } 
+                    setUploadedEvidence(prev =>
+                        prev.map(item =>
+                            item.name === res.name
+                                ? { ...item, url: res.url }
                                 : item
                         )
                     );
-                    
+
                     // STEP 2: Extract data from this file
                     console.log(`[EVIDENCE] Starting extraction for ${file.name}`);
-                    
+
                     // Update status to extracting for this file
                     statusTracker[file.name] = { progress: 100, state: 'extracting' };
-                    setUploadStatus({...statusTracker});
-                    console.log(`[EVIDENCE] Updated status to extracting for ${file.name}:`, 
+                    setUploadStatus({ ...statusTracker });
+                    console.log(`[EVIDENCE] Updated status to extracting for ${file.name}:`,
                         JSON.stringify(statusTracker[file.name]));
-                    
+
+                    // Extract the fileId from the URL
+                    const fileId = res.url.split('/').pop().split('_')[0];
+                    console.log(`[EVIDENCE] Extracted fileId from URL: ${fileId} for file ${file.name}`);
+
                     // Call AI extraction just for this file
-                    const result = await extractFormData(user?.token);
+                    const result = await extractFormData(user?.token, fileId);
                     console.log(`[EVIDENCE] AI extraction result for ${file.name}:`, result);
-                    
+
                     // Check if result has expected format
                     if (!result || !result.extracted) {
                         console.error(`[EVIDENCE] Invalid extraction result format for ${file.name}:`, result);
                         setEvidenceError(`AI extraction returned invalid data format for ${file.name}`);
-                        
+
                         // Mark failed extraction in status
                         statusTracker[file.name] = { progress: 100, state: 'extraction-failed' };
-                        setUploadStatus({...statusTracker});
-                        
+                        setUploadStatus({ ...statusTracker });
+
                         continue; // Skip to next file
                     }
-                    
+
                     // STEP 3: Process the extracted data
                     // result.extracted is an object: { filename: extractedJsonString }
                     let merged = { ...formData };
                     let changedFields = [];
                     let extractedFieldInfo = {};
                     let extractedFieldNames = new Set();
-                    
+
                     // Process extraction result for the current file
                     if (result.extracted[file.name]) {
                         const val = result.extracted[file.name];
                         console.log(`[EVIDENCE] Processing extraction from ${file.name}:`, val);
-                        
+
                         try {
                             let obj;
                             try {
@@ -438,20 +444,20 @@ const FormPage = () => {
                             } catch (parseErr) {
                                 console.error(`[EVIDENCE] Failed to parse JSON from ${file.name}:`, parseErr);
                                 console.error(`[EVIDENCE] Raw value:`, val);
-                                
+
                                 // Continue with next file if we can't parse this one
                                 statusTracker[file.name] = { progress: 100, state: 'extraction-failed' };
-                                setUploadStatus({...statusTracker});
+                                setUploadStatus({ ...statusTracker });
                                 continue;
                             }
-                            
+
                             Object.entries(obj).forEach(([k, v]) => {
                                 // v is expected to be { value, reasoning }
                                 if (!v || !v.value) {
                                     console.log(`[EVIDENCE] Skipping empty value for field: ${k}`);
                                     return;
                                 }
-                                
+
                                 let mappedKey = aiToFormFieldMap[k] || k;
                                 if (!aiToFormFieldMap[k]) {
                                     const lowerK = k.toLowerCase();
@@ -460,10 +466,10 @@ const FormPage = () => {
                                     );
                                     if (ciMatch) mappedKey = aiToFormFieldMap[ciMatch];
                                 }
-                                
+
                                 extractedFieldInfo[mappedKey] = { value: v.value, reasoning: v.reasoning };
                                 extractedFieldNames.add(mappedKey);
-                                
+
                                 // Special handling for names
                                 if (["Name of deceased", "Name of applicant", "Claimant", "Applicant"].includes(k)) {
                                     const { firstName, lastName } = splitName(v.value);
@@ -533,36 +539,61 @@ const FormPage = () => {
                             console.error(`[EVIDENCE] Error processing extraction for ${file.name}:`, e);
                             // If error in processing, continue with next file
                             statusTracker[file.name] = { progress: 100, state: 'extraction-failed' };
-                            setUploadStatus({...statusTracker});
+                            setUploadStatus({ ...statusTracker });
                             continue;
                         }
                     } else {
                         console.log(`[EVIDENCE] No extraction data found for ${file.name}`);
-                        
-                        // Check if it contains the "No relevant data found" error
-                        if (result.extracted[file.name] && typeof result.extracted[file.name] === 'string' && 
-                            result.extracted[file.name].includes("No relevant data found")) {
-                            
+
+                        // Check if it contains the "No relevant data found" error or warning
+                        if (result.extracted[file.name] && typeof result.extracted[file.name] === 'string' &&
+                            (result.extracted[file.name].includes("No relevant data found") ||
+                                result.extracted[file.name].includes("_warning"))) {
+
+                            // Try to parse it for any useful information
+                            try {
+                                const parsedResult = JSON.parse(result.extracted[file.name]);
+
+                                // Check for document type information from filename
+                                if (parsedResult._documentType && parsedResult._documentType.value) {
+                                    console.log(`[EVIDENCE] Document type detected from filename: ${parsedResult._documentType.value}`);
+
+                                    // Update evidence type in the form data
+                                    if (parsedResult._documentType.value.toLowerCase().includes("death certificate")) {
+                                        merged.evidenceType = "deathCertificate";
+                                        changedFields.push("evidenceType");
+                                    } else if (parsedResult._documentType.value.toLowerCase().includes("benefit")) {
+                                        merged.evidenceType = "benefitLetter";
+                                        changedFields.push("evidenceType");
+                                    } else if (parsedResult._documentType.value.toLowerCase().includes("funeral")) {
+                                        merged.evidenceType = "funeralInvoice";
+                                        changedFields.push("evidenceType");
+                                    }
+                                }
+                            } catch (e) {
+                                console.log(`[EVIDENCE] Error parsing warning JSON: ${e}`);
+                            }
+
                             // Set a warning instead of an error
                             setEvidenceWarning(`Limited text could be extracted from ${file.name}. The file was uploaded successfully, but we couldn't automatically fill any form fields.`);
-                            
+
                             // Mark as successful upload with warning
                             statusTracker[file.name] = { progress: 100, state: 'extraction-limited' };
-                            setUploadStatus({...statusTracker});
+                            setUploadStatus({ ...statusTracker });
                         }
                     }
-                    
+
                     console.log(`[AI->FORM] Merged formData after mapping for ${file.name}:`, merged);
-                    
+
                     try {
                         window.localStorage.setItem('debug_lastMergedFormData', JSON.stringify(merged));
-                    } catch (e) { 
+                    } catch (e) {
                         console.error('[AI->FORM] Failed to store debug data:', e);
                     }
-                    
+
                     // Update form data with merged values
                     setFormData(merged);
-                    
+
                     // Persist extracted data to backend for first-time ingest
                     if ((extractedFieldNames.size > 0 || changedFields.length > 0) && user?.token) {
                         try {
@@ -575,28 +606,38 @@ const FormPage = () => {
                             console.warn(`Failed to persist extracted data from ${file.name}:`, err);
                         }
                     }
-                    
-                    // Show popup with field updates if we have any
-                    if (Object.keys(extractedFieldInfo).length > 0 || changedFields.length > 0) {
-                        console.log(`[AI->FORM][POPUP] changedFields from ${file.name}:`, changedFields, 'merged:', merged);
-                        setExtractedFields(extractedFieldInfo);
-                        setUpdatedFields(changedFields);
-                        setShowUpdatedFieldsPopup(true);
-                    } else {
+
+                    // If no data was extracted, just update status and continue
+                    if (Object.keys(extractedFieldInfo).length === 0 && changedFields.length === 0) {
                         console.log(`[AI->FORM] No fields were extracted or changed from ${file.name}`);
                         // Set warning but don't treat as error - the file was uploaded successfully
                         // Just not able to extract useful data
                         setEvidenceWarning(`No relevant data could be extracted from ${file.name}. The file was uploaded successfully.`);
+
+                        // Don't show popup, just update status and continue
+                        statusTracker[file.name] = { progress: 100, state: 'processed' };
+                        setUploadStatus({ ...statusTracker });
+                        console.log(`[EVIDENCE] Updated status to processed for ${file.name}:`, JSON.stringify(statusTracker[file.name]));
+
+                        // Clear any UI blocking states
+                        setProcessingFiles(false);
+
+                        // Continue processing, don't block the UI
+                        continue;
                     }
-                    
-                    // Update status to show processed successfully
+
+                    // Show popup with field updates if we have any
+                    console.log(`[AI->FORM][POPUP] changedFields from ${file.name}:`, changedFields, 'merged:', merged);
+                    setExtractedFields(extractedFieldInfo);
+                    setUpdatedFields(changedFields);
+                    setShowUpdatedFieldsPopup(true);                    // Update status to show processed successfully
                     statusTracker[file.name] = { progress: 100, state: 'processed' };
-                    setUploadStatus({...statusTracker});
+                    setUploadStatus({ ...statusTracker });
                     console.log(`[EVIDENCE] Updated status to processed for ${file.name}:`, JSON.stringify(statusTracker[file.name]));
-                    
+
                 } catch (err) {
                     console.error(`[EVIDENCE] Processing failed for ${file.name}:`, err);
-                    
+
                     // Determine a more specific error message if possible
                     let errorMessage = `Failed to process ${file.name}`;
                     if (err.message?.includes('size')) {
@@ -604,14 +645,14 @@ const FormPage = () => {
                     } else if (err.message?.includes('type') || err.message?.includes('extension')) {
                         errorMessage = `File type for ${file.name} is not supported. Use PDF, JPG, PNG, or DOCX.`;
                     }
-                    
+
                     setEvidenceError(errorMessage);
-                    
+
                     // Mark as error in our tracker
                     statusTracker[file.name] = { progress: 0, state: 'error' };
-                    setUploadStatus({...statusTracker});
-                    
-                    console.log(`[EVIDENCE] File processing failed for ${file.name}, new status:`, 
+                    setUploadStatus({ ...statusTracker });
+
+                    console.log(`[EVIDENCE] File processing failed for ${file.name}, new status:`,
                         JSON.stringify(statusTracker[file.name]));
                 }
             }
@@ -621,6 +662,7 @@ const FormPage = () => {
         } finally {
             // Always turn off the uploading state when done
             setEvidenceUploading(false);
+            setProcessingFiles(false);
         }
     };
 
@@ -739,7 +781,7 @@ const FormPage = () => {
     // Initial state values - will be updated in useEffect
     const [currentStep, setCurrentStep] = useState(1);
     const [formData, setFormData] = useState(defaultFormData);
-    
+
     // Initialize form step based on URL params and saved data
     useEffect(() => {
         const initializeStep = () => {
@@ -776,7 +818,7 @@ const FormPage = () => {
                 return 1;
             }
         };
-        
+
         const initialStep = initializeStep();
         setCurrentStep(initialStep);
     }, [searchParams, user?.email]);
@@ -785,20 +827,20 @@ const FormPage = () => {
     // Function to load previously uploaded evidence
     const loadEvidenceList = useCallback(async () => {
         if (!user?.token) return;
-        
+
         try {
             console.log('[EVIDENCE] Loading evidence list');
             const files = await getEvidenceList(user.token);
-            
+
             if (files && files.length > 0) {
                 console.log(`[EVIDENCE] Loaded ${files.length} evidence files`);
-                
+
                 // Create status entries for all files
                 const newStatus = {};
                 files.forEach(file => {
                     newStatus[file.name] = { progress: 100, state: 'complete' };
                 });
-                
+
                 setUploadedEvidence(files);
                 setUploadStatus(newStatus);
             } else {
@@ -1110,17 +1152,30 @@ const FormPage = () => {
     };
 
     const handleNext = async () => {
-        if (validateStep(currentStep)) {
-            // Check if we came from the review page
-            const returnTo = searchParams.get('returnTo');
+        // Clear any warnings or errors when moving to next page
+        setEvidenceWarning('');
+        setEvidenceError('');
 
-            if (returnTo === 'review') {
-                await autoSaveToDatabase();
-                console.log('📝 FormPage: Returning to review page after saving section');
-                navigate("/review");
-            } else if (currentStep < 13) {
-                await autoSaveToDatabase();
-                setCurrentStep(currentStep + 1);
+        // Check if the current step is valid
+        if (validateStep(currentStep)) {
+            setLoading(true);
+            try {
+                // Check if we came from the review page
+                const returnTo = searchParams.get('returnTo');
+
+                if (returnTo === 'review') {
+                    await autoSaveToDatabase();
+                    console.log('📝 FormPage: Returning to review page after saving section');
+                    navigate("/review");
+                } else if (currentStep < 13) {
+                    await autoSaveToDatabase();
+                    setCurrentStep(currentStep + 1);
+                }
+            } catch (error) {
+                console.error('Error during form navigation:', error);
+                setErrors({ general: "An error occurred while saving. Please try again." });
+            } finally {
+                setLoading(false);
             }
         }
     };
@@ -1218,140 +1273,140 @@ const FormPage = () => {
                             top: 30,
                             right: 30,
                             zIndex: 9999,
-                    background: '#222',
-                    color: '#fff',
-                    padding: '18px 28px',
-                    borderRadius: 10,
-                    boxShadow: '0 2px 12px rgba(0,0,0,0.2)',
-                    fontSize: 16,
-                    maxWidth: 600,
-                    minWidth: 350
-                }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <b>AI Document Ingest Results</b>
-                        <button
-                            onClick={() => setShowUpdatedFieldsPopup(false)}
-                            style={{
-                                background: 'transparent',
-                                color: '#fff',
-                                border: 'none',
-                                fontSize: 20,
-                                cursor: 'pointer',
-                                marginLeft: 16
-                            }}
-                            aria-label="Close popup"
-                        >
-                            ×
-                        </button>
-                    </div>
-                    <div style={{ display: 'flex', gap: 32, marginTop: 12 }}>
-                        <div>
-                            <div style={{ fontWeight: 'bold', marginBottom: 6 }}>Extracted Data Fields & Reasoning</div>
-                            <ul style={{ margin: 0, padding: 0, listStyle: 'disc inside' }}>
-                                {extractedFields && Object.keys(extractedFields).length > 0 ? (
-                                    Object.entries(extractedFields).map(([field, info]) => (
-                                        <li key={field}>
-                                            <strong>{field}:</strong> {info.value}
-                                            <br />
-                                            <span style={{ color: '#888', fontSize: '0.95em' }}><em>{info.reasoning}</em></span>
-                                        </li>
-                                    ))
-                                ) : <li style={{ color: '#aaa' }}>None</li>}
-                            </ul>
-                        </div>
-                        <div>
-                            <div style={{ fontWeight: 'bold', marginBottom: 6 }}>Form Fields Updated</div>
-                            <ul style={{ margin: 0, padding: 0, listStyle: 'disc inside' }}>
-                                {updatedFields.length > 0 ? updatedFields.map(f => <li key={f}>{f}</li>) : <li style={{ color: '#aaa' }}>None</li>}
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-            )}
-            <div className="govuk-width-container">
-                <main className="govuk-main-wrapper" id="main-content" role="main">
-                    <div className="govuk-grid-row">
-                        <div className="govuk-grid-column-two-thirds">
-                            {/* Breadcrumbs removed as requested */}
-                            <span className="govuk-caption-xl">Step {currentStep} of 13</span>
-                            <h1 className="govuk-heading-xl">Apply for funeral expenses payment</h1>
-
-                            {hasErrors && (
-                                <div className="govuk-error-summary" aria-labelledby="error-summary-title" role="alert" data-module="govuk-error-summary">
-                                    <h2 className="govuk-error-summary__title" id="error-summary-title">
-                                        There is a problem
-                                    </h2>
-                                    <div className="govuk-error-summary__body">
-                                        <ul className="govuk-list govuk-error-summary__list">
-                                            {Object.entries(errors).map(([field, error]) => (
-                                                <li key={field}>
-                                                    <a href={`#${field}`}>{error}</a>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                </div>
-                            )}
-
-                            <form>
-                                {/* Dynamically render the correct section based on formSections */}
-                                {renderSection()}
-
-                                <div className="govuk-button-group">
-                                    {currentStep < 13 && (
-                                        <button
-                                            type="button"
-                                            className="govuk-button"
-                                            onClick={handleNext}
-                                            disabled={loading}
-                                        >
-                                            {searchParams.get('returnTo') === 'review' ? 'Save and return to summary' : 'Save and continue'}
-                                        </button>
-                                    )}
-
-                                    {currentStep === 13 && (
-                                        <button
-                                            type="button"
-                                            className="govuk-button"
-                                            onClick={handleSubmit}
-                                            disabled={loading}
-                                        >
-                                            {loading ? "Saving..." : "Continue to review"}
-                                        </button>
-                                    )}
-
-                                    {(currentStep > 1 || searchParams.get('returnTo') === 'review') && (
-                                        <button
-                                            type="button"
-                                            className="govuk-button govuk-button--secondary"
-                                            onClick={handlePrevious}
-                                            disabled={loading}
-                                        >
-                                            {searchParams.get('returnTo') === 'review' ? 'Back to summary' : 'Previous'}
-                                        </button>
-                                    )}
-                                </div>
-                            </form>
-
-                            {/* Bottom links for navigation and sign out */}
-                            <div className="dashboard-bottom-links" style={{ marginTop: 40, display: 'flex', alignItems: 'center' }}>
-                                <Link to="/dashboard" className="govuk-link govuk-!-margin-right-4">
-                                    Return to dashboard
-                                </Link>
-                                <a
-                                    href="/"
-                                    className="govuk-link dashboard-signout-link"
-                                    style={{ marginLeft: 'auto' }}
-                                    onClick={handleSignOut}
+                            background: '#222',
+                            color: '#fff',
+                            padding: '18px 28px',
+                            borderRadius: 10,
+                            boxShadow: '0 2px 12px rgba(0,0,0,0.2)',
+                            fontSize: 16,
+                            maxWidth: 600,
+                            minWidth: 350
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <b>AI Document Ingest Results</b>
+                                <button
+                                    onClick={() => setShowUpdatedFieldsPopup(false)}
+                                    style={{
+                                        background: 'transparent',
+                                        color: '#fff',
+                                        border: 'none',
+                                        fontSize: 20,
+                                        cursor: 'pointer',
+                                        marginLeft: 16
+                                    }}
+                                    aria-label="Close popup"
                                 >
-                                    Sign out
-                                </a>
+                                    ×
+                                </button>
                             </div>
-                            <ChatbotWidget />
-                        </div> {/* end govuk-grid-column-two-thirds */}
-                    </div> {/* end govuk-grid-row */}
-                </main>
-            </div>
+                            <div style={{ display: 'flex', gap: 32, marginTop: 12 }}>
+                                <div>
+                                    <div style={{ fontWeight: 'bold', marginBottom: 6 }}>Extracted Data Fields & Reasoning</div>
+                                    <ul style={{ margin: 0, padding: 0, listStyle: 'disc inside' }}>
+                                        {extractedFields && Object.keys(extractedFields).length > 0 ? (
+                                            Object.entries(extractedFields).map(([field, info]) => (
+                                                <li key={field}>
+                                                    <strong>{field}:</strong> {info.value}
+                                                    <br />
+                                                    <span style={{ color: '#888', fontSize: '0.95em' }}><em>{info.reasoning}</em></span>
+                                                </li>
+                                            ))
+                                        ) : <li style={{ color: '#aaa' }}>None</li>}
+                                    </ul>
+                                </div>
+                                <div>
+                                    <div style={{ fontWeight: 'bold', marginBottom: 6 }}>Form Fields Updated</div>
+                                    <ul style={{ margin: 0, padding: 0, listStyle: 'disc inside' }}>
+                                        {updatedFields.length > 0 ? updatedFields.map(f => <li key={f}>{f}</li>) : <li style={{ color: '#aaa' }}>None</li>}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    <div className="govuk-width-container">
+                        <main className="govuk-main-wrapper" id="main-content" role="main">
+                            <div className="govuk-grid-row">
+                                <div className="govuk-grid-column-two-thirds">
+                                    {/* Breadcrumbs removed as requested */}
+                                    <span className="govuk-caption-xl">Step {currentStep} of 13</span>
+                                    <h1 className="govuk-heading-xl">Apply for funeral expenses payment</h1>
+
+                                    {hasErrors && (
+                                        <div className="govuk-error-summary" aria-labelledby="error-summary-title" role="alert" data-module="govuk-error-summary">
+                                            <h2 className="govuk-error-summary__title" id="error-summary-title">
+                                                There is a problem
+                                            </h2>
+                                            <div className="govuk-error-summary__body">
+                                                <ul className="govuk-list govuk-error-summary__list">
+                                                    {Object.entries(errors).map(([field, error]) => (
+                                                        <li key={field}>
+                                                            <a href={`#${field}`}>{error}</a>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <form>
+                                        {/* Dynamically render the correct section based on formSections */}
+                                        {renderSection()}
+
+                                        <div className="govuk-button-group">
+                                            {currentStep < 13 && (
+                                                <button
+                                                    type="button"
+                                                    className="govuk-button"
+                                                    onClick={handleNext}
+                                                    disabled={loading}
+                                                >
+                                                    {searchParams.get('returnTo') === 'review' ? 'Save and return to summary' : 'Save and continue'}
+                                                </button>
+                                            )}
+
+                                            {currentStep === 13 && (
+                                                <button
+                                                    type="button"
+                                                    className="govuk-button"
+                                                    onClick={handleSubmit}
+                                                    disabled={loading}
+                                                >
+                                                    {loading ? "Saving..." : "Continue to review"}
+                                                </button>
+                                            )}
+
+                                            {(currentStep > 1 || searchParams.get('returnTo') === 'review') && (
+                                                <button
+                                                    type="button"
+                                                    className="govuk-button govuk-button--secondary"
+                                                    onClick={handlePrevious}
+                                                    disabled={loading}
+                                                >
+                                                    {searchParams.get('returnTo') === 'review' ? 'Back to summary' : 'Previous'}
+                                                </button>
+                                            )}
+                                        </div>
+                                    </form>
+
+                                    {/* Bottom links for navigation and sign out */}
+                                    <div className="dashboard-bottom-links" style={{ marginTop: 40, display: 'flex', alignItems: 'center' }}>
+                                        <Link to="/dashboard" className="govuk-link govuk-!-margin-right-4">
+                                            Return to dashboard
+                                        </Link>
+                                        <a
+                                            href="/"
+                                            className="govuk-link dashboard-signout-link"
+                                            style={{ marginLeft: 'auto' }}
+                                            onClick={handleSignOut}
+                                        >
+                                            Sign out
+                                        </a>
+                                    </div>
+                                    <ChatbotWidget />
+                                </div> {/* end govuk-grid-column-two-thirds */}
+                            </div> {/* end govuk-grid-row */}
+                        </main>
+                    </div>
                 </>
             )}
         </>

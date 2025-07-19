@@ -69,7 +69,7 @@ const loginUser = asyncHandler(async (req, res) => {
 
     const isMatch = await bcrypt.compare(password, user.password);
     console.log(`[AUTH] Password match result: ${isMatch}`);
-    
+
     if (!isMatch) {
         console.log(`[AUTH] Password mismatch for user: ${user.email}`);
         res.status(401);

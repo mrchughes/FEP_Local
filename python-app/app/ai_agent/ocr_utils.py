@@ -12,37 +12,104 @@ import logging
 # OCR Configuration
 OCR_CONFIG = {
     'lang': 'eng', # Language setting - can be expanded for multiple languages
-    'config': '--psm 6 --oem 3', # Page segmentation mode and OCR Engine mode
-    'dpi': 300 # DPI for PDF conversion
+    'config': '--psm 3 --oem 1', # Using more robust PSM 3 (auto page segmentation) and OEM 1 (LSTM only)
+    'dpi': 400 # Higher DPI for better quality
 }
 
-# Tesseract tuning parameters
-custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789,.;:?!@#$%^&*()-_+=<>[]{}|/\\ " -c tessedit_pageseg_mode=6'
+# Tesseract tuning parameters - updated for better results
+custom_config = r'--oem 1 --psm 3 -c tessedit_char_whitelist="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789,.;:?!@#$%^&*()-_+=<>[]{}|/\\ " -c textord_min_linesize=1.5'
 
-def preprocess_image(image):
+def preprocess_image(image, image_path=None):
     """
     Preprocess the image to improve OCR accuracy
     """
-    # Convert to grayscale
-    if image.mode != 'L':
-        image = image.convert('L')
+    from PIL import ImageEnhance, ImageFilter
     
-    # Enhance contrast - this helps with scanned documents
-    from PIL import ImageEnhance
-    enhancer = ImageEnhance.Contrast(image)
-    image = enhancer.enhance(2.0)  # Increase contrast
-    
-    # Sharpen the image to make text more defined
-    from PIL import ImageFilter
-    image = image.filter(ImageFilter.SHARPEN)
-    
-    # Resize image if too small
-    if image.width < 1000 or image.height < 1000:
-        ratio = max(1000/image.width, 1000/image.height)
-        new_size = (int(image.width * ratio), int(image.height * ratio))
-        image = image.resize(new_size, Image.LANCZOS)
+    try:
+        # Check if it's a PNG file for special processing
+        is_png = False
+        if image_path:
+            _, ext = os.path.splitext(image_path)
+            is_png = ext.lower() == '.png'
         
-    return image
+        # Convert to grayscale
+        if image.mode != 'L':
+            image = image.convert('L')
+        
+        # Increase image DPI if it's too low
+        dpi = getattr(image, 'info', {}).get('dpi', (72, 72))
+        if isinstance(dpi, tuple) and len(dpi) >= 1 and dpi[0] < 300:
+            logging.info(f"[OCR] Low DPI image detected: {dpi}. Enhancing...")
+        
+        # Additional preprocessing for PNG files (likely scanned documents)
+        if is_png:
+            logging.info(f"[OCR] Using enhanced preprocessing for PNG file")
+            
+            # Special processing for scanned documents - try multiple approaches
+            processed_images = []
+            
+            # Approach 1: Binarization with adaptive thresholding
+            try:
+                img1 = image.copy()
+                img1 = img1.filter(ImageFilter.UnsharpMask(radius=2, percent=150, threshold=3))
+                enhancer = ImageEnhance.Contrast(img1)
+                img1 = enhancer.enhance(3.0)  # Higher contrast for scanned docs
+                img1 = img1.filter(ImageFilter.SHARPEN)
+                img1 = img1.filter(ImageFilter.MedianFilter(size=3))
+                processed_images.append(img1)
+            except Exception as e:
+                logging.error(f"[OCR] Preprocessing approach 1 failed: {e}")
+            
+            # Approach 2: Less aggressive contrast enhancement
+            try:
+                img2 = image.copy()
+                enhancer = ImageEnhance.Contrast(img2)
+                img2 = enhancer.enhance(1.8)
+                img2 = img2.filter(ImageFilter.SHARPEN)
+                processed_images.append(img2)
+            except Exception as e:
+                logging.error(f"[OCR] Preprocessing approach 2 failed: {e}")
+            
+            # Approach 3: Simple sharpening
+            try:
+                img3 = image.copy()
+                img3 = img3.filter(ImageFilter.SHARPEN)
+                img3 = img3.filter(ImageFilter.SHARPEN)
+                processed_images.append(img3)
+            except Exception as e:
+                logging.error(f"[OCR] Preprocessing approach 3 failed: {e}")
+            
+            # Return the first processed image, but we'll use all of them in extract_text_from_image
+            if processed_images:
+                logging.info(f"[OCR] Created {len(processed_images)} preprocessed versions for PNG")
+                return processed_images[0]
+        
+        # Standard preprocessing for other image types
+        # Binarize the image using adaptive thresholding
+        image = image.filter(ImageFilter.UnsharpMask(radius=2, percent=150, threshold=3))
+        
+        # Enhance contrast - this helps with scanned documents
+        enhancer = ImageEnhance.Contrast(image)
+        image = enhancer.enhance(2.5)  # Increased contrast for better OCR
+        
+        # Additional sharpening for text clarity
+        image = image.filter(ImageFilter.SHARPEN)
+        image = image.filter(ImageFilter.SHARPEN)  # Apply twice for better effect
+        
+        # Resize image if too small
+        if image.width < 1200 or image.height < 1200:
+            ratio = max(1200/image.width, 1200/image.height)
+            new_size = (int(image.width * ratio), int(image.height * ratio))
+            image = image.resize(new_size, Image.LANCZOS)
+        
+        # Apply additional noise reduction
+        image = image.filter(ImageFilter.MedianFilter(size=3))
+        
+        logging.info(f"[OCR] Image preprocessing complete. New size: {image.width}x{image.height}")
+        return image
+    except Exception as e:
+        logging.error(f"[OCR] Error in image preprocessing: {str(e)}", exc_info=True)
+        return image  # Return original image if preprocessing fails
 
 def extract_text_from_image(image_path):
     """
@@ -55,16 +122,38 @@ def extract_text_from_image(image_path):
         # Get image details for logging
         logging.info(f"[OCR] Image size: {image.size}, mode: {image.mode}, format: {image.format}")
         
+        # For PNG files, try multiple preprocessing approaches
+        all_texts = []
+        best_text = ""
+        
+        # Get the file extension
+        _, ext = os.path.splitext(image_path)
+        is_png = ext.lower() == '.png'
+        
         # Preprocess the image for better OCR results
-        processed_image = preprocess_image(image)
+        processed_image = preprocess_image(image, image_path)
         
         # Try multiple OCR configurations for better results
         configs = [
             custom_config,
-            '--psm 4 --oem 3',  # Assume a single column of text
-            '--psm 3 --oem 3',  # Fully automatic page segmentation
-            '--psm 12 --oem 3'  # Sparse text with OSD
+            '--psm 4 --oem 1',  # Assume a single column of text with LSTM only
+            '--psm 3 --oem 1',  # Fully automatic page segmentation with LSTM only
+            '--psm 6 --oem 1',  # Assume a single uniform block of text with LSTM only
+            '--psm 11 --oem 1', # Sparse text - no specific orientation or spacing
+            '--psm 1 --oem 1',  # Auto page segmentation with OSD
+            '--psm 4 --oem 3',  # Assume a single column of text with LSTM + legacy
+            '--psm 3 --oem 3',  # Fully automatic page segmentation with LSTM + legacy
+            '--psm 12 --oem 3'  # Sparse text with OSD with LSTM + legacy
         ]
+        
+        # For PNG files, add more specialized configs that work well with scanned documents
+        if is_png:
+            configs.extend([
+                '--psm 4 --oem 1 -c tessedit_char_whitelist="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789,.;:?!@#$%^&*()-_+=<>[]{}|/\\ "',  # Better for scanned text
+                '--psm 6 --oem 1 -c textord_min_linesize=1.5',  # Better for letter-type documents
+                '--psm 3 --oem 1 -l eng --dpi 300',  # Explicitly set higher DPI
+                '--psm 1 --oem 1 -c textord_heavy_nr=1 -c textord_really_old_xheight=1',  # Better for low quality scans
+            ])
         
         best_text = ""
         
@@ -73,16 +162,21 @@ def extract_text_from_image(image_path):
             default_text = pytesseract.image_to_string(processed_image, lang=OCR_CONFIG['lang'])
             if default_text:
                 best_text = default_text
+                all_texts.append(default_text)
                 logging.info(f"[OCR] Default configuration extracted {len(default_text)} chars")
         except Exception as e:
             logging.warning(f"[OCR] Default extraction failed: {e}")
         
-        # Try alternative configurations if default didn't produce good results
-        if len(best_text.strip()) < 50:
-            for config in configs:
+        # ALWAYS try alternative configurations regardless of default result
+        # This helps ensure we get the best possible extraction
+        for config in configs:
                 try:
                     text = pytesseract.image_to_string(processed_image, lang=OCR_CONFIG['lang'], config=config)
                     logging.info(f"[OCR] Config {config[:10]}... extracted {len(text)} chars")
+                    
+                    # Store all extracted texts
+                    if text:
+                        all_texts.append(text)
                     
                     # Choose the configuration that extracts the most text
                     if len(text) > len(best_text):
@@ -91,11 +185,42 @@ def extract_text_from_image(image_path):
                     logging.error(f"[OCR] Error with config {config}: {inner_e}")
                     continue
         
+        # For PNG files, if best_text is too short, combine all extracted texts
+        _, ext = os.path.splitext(image_path)
+        if ext.lower() == '.png' and len(best_text.strip()) < 50 and all_texts:
+            logging.info(f"[OCR] PNG file with limited text. Combining {len(all_texts)} extracted results")
+            # Combine all extracted texts, removing duplicates
+            combined_text = "\n\n".join(all_texts)
+            # Clean and deduplicate lines
+            lines = set()
+            for line in combined_text.split("\n"):
+                line = line.strip()
+                if line and len(line) > 3:  # Only keep lines with meaningful content
+                    lines.add(line)
+            
+            combined_text = "\n".join(lines)
+            logging.info(f"[OCR] Combined {len(lines)} unique lines with {len(combined_text)} chars")
+            
+            if len(combined_text) > len(best_text):
+                best_text = combined_text
+        
         if not best_text:
             logging.warning(f"[OCR] No text extracted from image {image_path}")
             
         # Clean the extracted text
         best_text = clean_extracted_text(best_text)
+        
+        # For PNG files, try direct OCR as a last resort if still no text
+        _, ext = os.path.splitext(image_path)
+        if ext.lower() == '.png' and not best_text:
+            try:
+                logging.info(f"[OCR] Trying direct OCR without preprocessing for PNG file")
+                direct_text = pytesseract.image_to_string(image, lang=OCR_CONFIG['lang'])
+                if direct_text:
+                    best_text = clean_extracted_text(direct_text)
+                    logging.info(f"[OCR] Direct OCR extracted {len(best_text)} chars")
+            except Exception as direct_err:
+                logging.error(f"[OCR] Direct OCR failed: {direct_err}")
         
         # Log the result
         if len(best_text) > 0:
@@ -174,7 +299,29 @@ def process_document(file_path):
         
         # Extract text based on file type
         if ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']:
-            text = extract_text_from_image(file_path)
+            # For PNG files, use enhanced processing
+            if ext == '.png':
+                logging.info(f"[OCR] Using enhanced PNG processing for {file_path}")
+                text = extract_text_from_image(file_path)
+                if not text or len(text.strip()) < 50:
+                    # If little or no text was extracted, try more aggressive approaches
+                    logging.warning(f"[OCR] Limited text from PNG file {file_path}, trying alternative methods")
+                    # Try converting image to different formats
+                    try:
+                        image = Image.open(file_path)
+                        # Try grayscale conversion
+                        gray_image = image.convert('L')
+                        with tempfile.NamedTemporaryFile(suffix='.tiff') as tmp:
+                            gray_image.save(tmp.name)
+                            tiff_text = extract_text_from_image(tmp.name)
+                            if len(tiff_text) > len(text):
+                                text = tiff_text
+                                logging.info(f"[OCR] Got better results from TIFF conversion: {len(text)} chars")
+                    except Exception as e:
+                        logging.error(f"[OCR] Format conversion failed: {e}")
+            else:
+                text = extract_text_from_image(file_path)
+            
             logging.info(f"[OCR] Extracted {len(text)} characters from image")
         elif ext == '.pdf':
             text = extract_text_from_pdf(file_path)

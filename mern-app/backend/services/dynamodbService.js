@@ -7,7 +7,7 @@ if (!mongoose.connection.readyState) {
   console.log('[DB] Connecting to MongoDB...');
   console.log(`[DB] MONGODB_URI exists: ${Boolean(process.env.MONGODB_URI)}`);
   console.log(`[DB] MONGODB_URI length: ${process.env.MONGODB_URI ? process.env.MONGODB_URI.length : 0}`);
-  
+
   mongoose.connect(process.env.MONGODB_URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true,

@@ -12,7 +12,7 @@ const generateToken = (email) => {
             expiresIn: "30d",
         });
     }
-    
+
     console.log(`[TOKEN] Using JWT_SECRET with length: ${process.env.JWT_SECRET.length}`);
     return jwt.sign({ email }, process.env.JWT_SECRET, {
         expiresIn: "30d",

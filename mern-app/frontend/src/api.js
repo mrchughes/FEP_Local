@@ -1,7 +1,7 @@
 // Password reset endpoint
 export const resetPassword = async ({ email, newPassword }) => {
     try {
-        const res = await api.post('/auth/reset-password', { email, newPassword });
+        const res = await api.post('/users/reset-password', { email, newPassword });
         return res.data;
     } catch (error) {
         throw new Error(error.response?.data?.message || 'Password reset failed');
@@ -48,7 +48,7 @@ api.interceptors.response.use(
 
 export const register = async (userData) => {
     try {
-        const res = await api.post('/auth/register', userData);
+        const res = await api.post('/users/register', userData);
         return res.data;
     } catch (error) {
         throw new Error(error.response?.data?.message || 'Registration failed');
@@ -57,7 +57,7 @@ export const register = async (userData) => {
 
 export const login = async (userData) => {
     try {
-        const res = await api.post('/auth/login', userData);
+        const res = await api.post('/users/login', userData);
         return res.data;
     } catch (error) {
         throw new Error(error.response?.data?.message || 'Login failed');

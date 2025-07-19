@@ -6,13 +6,13 @@ const API_URL = process.env.REACT_APP_API_URL || "/api";
 export async function uploadEvidenceFile(file, token, onProgress) {
   const formData = new FormData();
   formData.append("evidence", file);
-  
+
   console.log(`[EVIDENCE API] Starting upload for file: ${file.name}, size: ${file.size} bytes, type: ${file.type}`);
-  
+
   // Use XMLHttpRequest to track upload progress
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    
+
     // Set up progress tracking
     if (onProgress && typeof onProgress === 'function') {
       xhr.upload.addEventListener('progress', (event) => {
@@ -23,11 +23,11 @@ export async function uploadEvidenceFile(file, token, onProgress) {
         }
       });
     }
-    
+
     xhr.open('POST', `${API_URL}/evidence/upload`);
     xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-    
-    xhr.onload = function() {
+
+    xhr.onload = function () {
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           const response = JSON.parse(xhr.responseText);
@@ -42,12 +42,12 @@ export async function uploadEvidenceFile(file, token, onProgress) {
         reject(new Error(`Upload failed: ${xhr.responseText || 'Server error'}`));
       }
     };
-    
-    xhr.onerror = function() {
+
+    xhr.onerror = function () {
       console.error(`[EVIDENCE API] Network error during upload for ${file.name}`);
       reject(new Error('Network error during upload'));
     };
-    
+
     xhr.send(formData);
   });
 }
@@ -65,7 +65,7 @@ export async function deleteEvidenceFile(filename, token) {
 
 export async function getEvidenceList(token) {
   console.log(`[EVIDENCE API] Getting list of uploaded evidence files`);
-  
+
   try {
     const response = await fetch(`${API_URL}/evidence/list`, {
       method: 'GET',
@@ -73,13 +73,13 @@ export async function getEvidenceList(token) {
         'Authorization': `Bearer ${token}`
       }
     });
-    
+
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`[EVIDENCE API] List error: ${response.status}, ${errorText}`);
       throw new Error(`Failed to list evidence: ${errorText || 'Server error'}`);
     }
-    
+
     const data = await response.json();
     console.log(`[EVIDENCE API] Retrieved ${data.files?.length || 0} evidence files`);
     return data.files || [];

@@ -41,10 +41,10 @@ const EvidenceUpload = ({ onUpload, onDelete, evidenceList, uploadStatus }) => {
 
   const renderFileStatus = (filename) => {
     console.log(`[DEBUG] renderFileStatus for ${filename}, uploadStatus:`, uploadStatus);
-    
+
     // Always show some status info even if we don't have an entry in uploadStatus
     const status = uploadStatus?.[filename];
-    
+
     // Force display of status for debugging
     const testStatus = {
       uploading: { progress: 45, state: 'uploading' },
@@ -53,17 +53,17 @@ const EvidenceUpload = ({ onUpload, onDelete, evidenceList, uploadStatus }) => {
       error: { progress: 0, state: 'error' },
       complete: { progress: 100, state: 'complete' }
     };
-    
+
     // Uncomment this line to force a test status for all files
     // const forcedStatus = testStatus.uploading;
-    
+
     if (!status) {
       console.log(`[DEBUG] No status found for ${filename}, defaulting to 'uploading'`);
       // If no status, assume uploading just started (for debugging)
       return (
         <span className="file-status default" aria-live="polite">
-          <span className="govuk-tag govuk-tag--blue" style={{ 
-            fontSize: '16px', 
+          <span className="govuk-tag govuk-tag--blue" style={{
+            fontSize: '16px',
             padding: '4px 8px',
             fontWeight: 'bold',
             display: 'inline-block',
@@ -72,36 +72,36 @@ const EvidenceUpload = ({ onUpload, onDelete, evidenceList, uploadStatus }) => {
         </span>
       );
     }
-    
+
     console.log(`[DEBUG] File status for ${filename}:`, status);
-    
+
     if (status.state === 'uploading') {
       return (
-        <span className="file-status uploading" aria-live="polite" style={{display: 'inline-flex', alignItems: 'center'}}>
-          <span className="govuk-tag govuk-tag--blue" style={{ 
-            fontSize: '16px', 
+        <span className="file-status uploading" aria-live="polite" style={{ display: 'inline-flex', alignItems: 'center' }}>
+          <span className="govuk-tag govuk-tag--blue" style={{
+            fontSize: '16px',
             padding: '4px 8px',
             fontWeight: 'bold',
             marginRight: '10px'
           }}>Uploading: {status.progress}%</span>
-          <div className="progress-bar" style={{ 
-            width: '150px', 
-            height: '12px', 
+          <div className="progress-bar" style={{
+            width: '150px',
+            height: '12px',
             backgroundColor: '#f3f2f1',
             borderRadius: '4px',
             overflow: 'hidden',
             border: '1px solid #1d70b8'
           }}>
-            <div 
-              className="progress-bar-fill" 
-              style={{ 
-                width: `${status.progress}%`, 
+            <div
+              className="progress-bar-fill"
+              style={{
+                width: `${status.progress}%`,
                 height: '100%',
                 backgroundColor: '#1d70b8'
               }}
-              role="progressbar" 
-              aria-valuenow={status.progress} 
-              aria-valuemin="0" 
+              role="progressbar"
+              aria-valuenow={status.progress}
+              aria-valuemin="0"
               aria-valuemax="100"
             ></div>
           </div>
@@ -110,8 +110,8 @@ const EvidenceUpload = ({ onUpload, onDelete, evidenceList, uploadStatus }) => {
     } else if (status.state === 'extracting') {
       return (
         <span className="file-status extracting" aria-live="polite">
-          <span className="govuk-tag govuk-tag--orange" style={{ 
-            fontSize: '16px', 
+          <span className="govuk-tag govuk-tag--orange" style={{
+            fontSize: '16px',
             padding: '4px 8px',
             fontWeight: 'bold',
             display: 'inline-block',
@@ -120,42 +120,42 @@ const EvidenceUpload = ({ onUpload, onDelete, evidenceList, uploadStatus }) => {
         </span>
       );
     } else if (status.state === 'processed') {
-      return <span className="file-status complete govuk-tag govuk-tag--green" style={{ 
-        fontSize: '16px', 
+      return <span className="file-status complete govuk-tag govuk-tag--green" style={{
+        fontSize: '16px',
         padding: '4px 8px',
         fontWeight: 'bold',
         display: 'inline-block',
         marginLeft: '10px'
       }}>Processed</span>;
     } else if (status.state === 'extraction-failed') {
-      return <span className="file-status error govuk-tag govuk-tag--red" style={{ 
-        fontSize: '16px', 
+      return <span className="file-status error govuk-tag govuk-tag--red" style={{
+        fontSize: '16px',
         padding: '4px 8px',
         fontWeight: 'bold',
         display: 'inline-block',
         marginLeft: '10px'
       }}>Extraction failed</span>;
     } else if (status.state === 'error') {
-      return <span className="file-status error govuk-tag govuk-tag--red" style={{ 
-        fontSize: '16px', 
+      return <span className="file-status error govuk-tag govuk-tag--red" style={{
+        fontSize: '16px',
         padding: '4px 8px',
         fontWeight: 'bold',
         display: 'inline-block',
         marginLeft: '10px'
       }}>Failed to upload</span>;
     } else if (status.state === 'complete') {
-      return <span className="file-status complete govuk-tag govuk-tag--green" style={{ 
-        fontSize: '16px', 
+      return <span className="file-status complete govuk-tag govuk-tag--green" style={{
+        fontSize: '16px',
         padding: '4px 8px',
         fontWeight: 'bold',
         display: 'inline-block',
         marginLeft: '10px'
       }}>Uploaded</span>;
     }
-    
+
     // Default fallback status
-    return <span className="file-status unknown govuk-tag" style={{ 
-      fontSize: '16px', 
+    return <span className="file-status unknown govuk-tag" style={{
+      fontSize: '16px',
       padding: '4px 8px',
       fontWeight: 'bold',
       display: 'inline-block',
@@ -189,9 +189,9 @@ const EvidenceUpload = ({ onUpload, onDelete, evidenceList, uploadStatus }) => {
               console.log(`[DEBUG] Rendering file item for ${file.name}, upload status:`, uploadStatus?.[file.name]);
               return (
                 <li key={file.name} className="govuk-!-margin-bottom-3 evidence-file-item">
-                  <div className="evidence-file-container" style={{ 
-                    padding: '12px', 
-                    border: '2px solid #1d70b8', 
+                  <div className="evidence-file-container" style={{
+                    padding: '12px',
+                    border: '2px solid #1d70b8',
                     borderRadius: '5px',
                     backgroundColor: '#f8f8f8',
                     position: 'relative'
@@ -206,22 +206,22 @@ const EvidenceUpload = ({ onUpload, onDelete, evidenceList, uploadStatus }) => {
                         <strong>{file.name}</strong>
                       )}
                     </div>
-                    
+
                     <div className="evidence-file-status" style={{
                       margin: '8px 0',
                       minHeight: '30px'
                     }}>
                       {renderFileStatus(file.name)}
                     </div>
-                    
+
                     <button
                       type="button"
                       className="govuk-button govuk-button--warning govuk-!-margin-top-2 govuk-!-margin-bottom-0"
                       onClick={() => handleDeleteClick(file.name)}
                       aria-label={`Delete ${file.name}`}
-                      style={{ 
-                        padding: '2px 8px', 
-                        fontSize: '0.9em', 
+                      style={{
+                        padding: '2px 8px',
+                        fontSize: '0.9em',
                         display: 'inline-block',
                         marginLeft: '0'
                       }}

@@ -25,16 +25,39 @@ function syncEvidenceToAIAgent() {
         return;
     }
 
-    const files = fs.readdirSync(EVIDENCE_UPLOADS);
-    console.log(`[AI EXTRACT] Found ${files.length} files to sync to AI agent`);
+    const directories = fs.readdirSync(EVIDENCE_UPLOADS);
+    console.log(`[AI EXTRACT] Found ${directories.length} upload directories to check`);
 
     let syncCount = 0;
-    for (const file of files) {
-        const src = path.join(EVIDENCE_UPLOADS, file);
-        const dest = path.join(AI_AGENT_DOCS, file);
+    for (const dir of directories) {
+        const dirPath = path.join(EVIDENCE_UPLOADS, dir);
 
-        // Check if the file actually exists and is a file (not a directory)
-        if (fs.existsSync(src) && fs.statSync(src).isFile()) {
+        // Check if this is a directory
+        if (fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory()) {
+            // It's a directory, so process all files inside it
+            const files = fs.readdirSync(dirPath);
+            console.log(`[SYNC] Found ${files.length} files in directory ${dir}`);
+
+            for (const file of files) {
+                const src = path.join(dirPath, file);
+                // Add the directory ID as a prefix to the filename in the shared volume
+                const dest = path.join(AI_AGENT_DOCS, `${dir}_${file}`);
+
+                if (fs.existsSync(src) && fs.statSync(src).isFile()) {
+                    try {
+                        fs.copyFileSync(src, dest);
+                        console.log(`[SYNC] Copied evidence file ${src} to shared volume ${dest}`);
+                        syncCount++;
+                    } catch (err) {
+                        console.error(`[SYNC ERROR] Failed to copy ${src} to ${dest}:`, err.message);
+                    }
+                }
+            }
+        } else if (fs.existsSync(dirPath) && fs.statSync(dirPath).isFile()) {
+            // Handle direct files in the uploads/evidence directory
+            const src = dirPath;
+            const dest = path.join(AI_AGENT_DOCS, dir);
+
             try {
                 fs.copyFileSync(src, dest);
                 console.log(`[SYNC] Copied evidence file ${src} to shared volume ${dest}`);
@@ -43,11 +66,11 @@ function syncEvidenceToAIAgent() {
                 console.error(`[SYNC ERROR] Failed to copy ${src} to ${dest}:`, err.message);
             }
         } else {
-            console.warn(`[SYNC WARN] Source file ${src} does not exist or is not a file`);
+            console.warn(`[SYNC WARN] Source path ${dirPath} does not exist or is not accessible`);
         }
     }
 
-    console.log(`[AI EXTRACT] Successfully synced ${syncCount} of ${files.length} files to AI agent docs directory`);
+    console.log(`[AI EXTRACT] Successfully synced ${syncCount} files to AI agent docs directory`);
     return syncCount;
 }
 
@@ -58,9 +81,19 @@ async function extractFormData(req, res) {
         // Sync evidence files to AI agent docs dir
         syncEvidenceToAIAgent();
 
-        // Get list of evidence files
+        // Get list of evidence files, or use the specific fileId if provided
         const EVIDENCE_UPLOADS = path.join(__dirname, "../uploads/evidence");
-        const files = fs.existsSync(EVIDENCE_UPLOADS) ? fs.readdirSync(EVIDENCE_UPLOADS) : [];
+        let files = [];
+
+        // Check if a specific fileId was provided
+        if (req.body && req.body.fileId) {
+            console.log(`[AI EXTRACT] Specific fileId provided: ${req.body.fileId}`);
+            files = [req.body.fileId];
+        } else {
+            // Get all files if no specific fileId was provided
+            files = fs.existsSync(EVIDENCE_UPLOADS) ? fs.readdirSync(EVIDENCE_UPLOADS) : [];
+            console.log(`[AI EXTRACT] No specific fileId provided, using all ${files.length} files`);
+        }
 
         if (files.length === 0) {
             console.log('[AI EXTRACT] No evidence files found to extract data from');

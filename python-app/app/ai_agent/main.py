@@ -790,12 +790,34 @@ def extract_form_data():
     # Process all files in the directory if no specific files requested
     file_list = requested_files if requested_files else os.listdir(docs_dir)
     
+    # Create a map of file ID prefixes to full filenames for matching
+    file_prefix_map = {}
+    all_files_in_dir = os.listdir(docs_dir)
+    for full_filename in all_files_in_dir:
+        # For each file in the directory, check if it starts with one of our requested IDs
+        for requested_id in requested_files:
+            if full_filename.startswith(requested_id):
+                file_prefix_map[requested_id] = full_filename
+                logging.info(f"[EXTRACT] Mapped requested ID {requested_id} to file {full_filename}")
+    
     for fname in file_list:
-        file_path = os.path.join(docs_dir, fname)
+        # If this is a requested ID and we found a matching file, use the full filename
+        actual_filename = file_prefix_map.get(fname, fname)
+        file_path = os.path.join(docs_dir, actual_filename)
+        
         if not os.path.exists(file_path):
             logging.warning(f"[EXTRACT] File not found: {file_path}")
-            extracted[fname] = "Error: File not found"
-            continue
+            # Look for files with two patterns:
+            # 1. Files that start with the ID followed by underscore (new pattern)
+            # 2. Files that exactly match the filename (original pattern)
+            matching_files = [f for f in all_files_in_dir if f.startswith(f"{fname}_") or f == fname]
+            if matching_files:
+                actual_filename = matching_files[0]
+                file_path = os.path.join(docs_dir, actual_filename)
+                logging.info(f"[EXTRACT] Found matching file by prefix: {actual_filename}")
+            else:
+                extracted[fname] = "Error: File not found"
+                continue
             
         if not os.path.isfile(file_path):
             logging.warning(f"[EXTRACT] Not a file: {file_path}")
@@ -815,8 +837,9 @@ def extract_form_data():
             content = processing_result.get("text", "")
             logging.info(f"[EXTRACT] Successfully extracted {len(content)} characters from document")
             
-            # Check if we actually got any meaningful content
-            if not content or len(content.strip()) < 1:  # Only filter out completely empty text
+            # Check if we actually got any meaningful content - VERY MINIMAL CHECK
+            # Even just a few characters might contain useful info when OCR fails partially
+            if not content:  # Only filter out completely empty text
                 logging.warning(f"[EXTRACT] Insufficient text content extracted from {fname}: '{content}'")
                 
                 # Return a warning in a standardized JSON format instead of an error
@@ -830,6 +853,26 @@ def extract_form_data():
                         "reasoning": "Inferred from filename"
                     }
                 }
+                
+                # Add some fields based on the filename to help with form matching
+                filename_parts = fname.split('_')
+                if len(filename_parts) > 1:
+                    # Extract file type and description from the filename
+                    if "death" in fname.lower() or "certificate" in fname.lower():
+                        warning_result["_documentType"] = {
+                            "value": "Death Certificate",
+                            "reasoning": "Inferred from filename containing 'death' or 'certificate'"
+                        }
+                    elif "letter" in fname.lower() or "work" in fname.lower() or "pension" in fname.lower():
+                        warning_result["_documentType"] = {
+                            "value": "Benefit Letter",
+                            "reasoning": "Inferred from filename containing 'letter', 'work', or 'pension'"
+                        }
+                    elif "invoice" in fname.lower() or "funeral" in fname.lower() or "bill" in fname.lower():
+                        warning_result["_documentType"] = {
+                            "value": "Funeral Invoice",
+                            "reasoning": "Inferred from filename containing 'invoice', 'funeral', or 'bill'"
+                        }
                 
                 extracted[fname] = json.dumps(warning_result, indent=4)
                 continue
@@ -893,11 +936,17 @@ For each field you can extract, provide:
 - The value
 - A short explanation of your reasoning or the evidence source
 
-If a field is not directly mentioned but can be inferred, include it and explain your inference.
+SUPER IMPORTANT: The OCR text may be VERY limited, noisy, or fragmented, especially for scanned documents. You must try your absolute best to identify ANY relevant information, even if the text is extremely minimal. Even partial names, dates, addresses, or just a few words can be valuable.
 
-If the text is empty or contains no relevant information, try to guess the document type (Death Certificate, Funeral Bill, Benefits Letter, etc) based on the filename and indicate any likely fields based on the document type.
+1. For scanned letters, look for patterns like department names, reference numbers, dates, and recipient names.
+2. For scanned certificates, look for official terminology like "certificate", "death", "birth", etc.
+3. For scanned invoices, look for amount formats, company names, and service descriptions.
+4. For images, even a few words can indicate document type.
 
+CRITICAL: The document filename itself provides important clues about the document type. Analyze it carefully.
 Filename: {fname}
+
+If you can see the document is a specific type (e.g., "death certificate", "funeral bill", etc.) but can't extract specific fields, at least return a "_fileType" field with that information.
 
 Return your answer as a JSON object where each key is a field name, and each value is an object with 'value' and 'reasoning'.
 

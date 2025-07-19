@@ -47,7 +47,8 @@ app.use(cors({
 app.use(express.json({ limit: "20mb" })); // Increased limit for JSON payloads
 app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 
-app.use("/api/auth", authRoutes);
+// Mount API routes
+app.use("/api/users", authRoutes);  // Changed from /api/auth to /api/users to match frontend
 app.use("/api/forms", formRoutes);
 app.use("/api/evidence", evidenceRoutes);
 app.use("/api/ai-agent", aiAgentRoutes);

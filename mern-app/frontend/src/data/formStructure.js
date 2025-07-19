@@ -336,8 +336,8 @@ export const getConditionalFields = (formData) => {
           conditionalFields[field.name] = formData[condField]?.includes(condValue) || false;
         } else {
           // Case-insensitive comparison for string values
-          conditionalFields[field.name] = 
-            typeof formData[condField] === 'string' && 
+          conditionalFields[field.name] =
+            typeof formData[condField] === 'string' &&
             typeof condValue === 'string' &&
             formData[condField]?.toLowerCase() === condValue.toLowerCase();
         }
