@@ -9,6 +9,8 @@
 
 This document provides comprehensive specifications for the Financial Entitlement Platform (FEP) application (implemented as MERN application) with particular focus on the integration with Personal Data Store (PDS) for verifiable credential management. The specification includes detailed requirements for application form handling, evidence uploads, and PDS integration.
 
+The FEP application is designed to be interoperable with any standards-compliant Personal Data Store implementation, not just those within this specific project. It follows established decentralized identity standards to ensure maximum compatibility with the broader PDS ecosystem.
+
 ## Table of Contents
 1. [System Overview](#system-overview)
 2. [Application Form Requirements](#application-form-requirements)
@@ -80,7 +82,7 @@ The integration with PDS allows for a more streamlined application process by le
 2. **Multi-file Selection**
    - Users must be able to select multiple files for upload in a single operation
    - The UI must provide clear feedback on selected files
-   - The UI must display progress during the upload process
+   - The UI must display progress during the upload and processing process in simple terms
 
 3. **Upload Processing Workflow**
    - For each selected file, the system must seuentially:
@@ -143,19 +145,41 @@ The integration with PDS allows for a more streamlined application process by le
    - On the evidence page, include a section: "Do you have a Personal Data Store with Verifiable Credentials?"
    - If user selects "Yes", prompt for their WebID
    - Example WebID format: `https://username.solidcommunity.net/profile/card#me`
+   - Support for multiple PDS providers should be built in, not just those in this specific project
 
 2. **WebID Processing**
-   - Extract the PDS URL from the WebID
-   - Example: From `https://username.solidcommunity.net/profile/card#me`, extract `https://username.solidcommunity.net/`
+   - Extract the PDS URL from the WebID by resolving the WebID document
+   - Process:
+     1. Fetch the WebID document (e.g., `https://username.solidcommunity.net/profile/card`)
+     2. Parse the document to locate the PDS service endpoint
+     3. Fall back to the domain root if no explicit PDS endpoint is found
+   - Implement robust error handling for various WebID formats and providers
 
-3. **Service Registration**
+3. **Service Discovery**
+   - Implement WebFinger or similar discovery protocol to locate the PDS endpoints
+   - Discovery endpoint: `https://{domain}/.well-known/solid`
+   - This ensures compatibility with any standards-compliant PDS provider
+   - Example discovery response:
+     ```json
+     {
+       "issuer": "https://pds-provider.example",
+       "authorization_endpoint": "https://pds-provider.example/auth",
+       "token_endpoint": "https://pds-provider.example/token",
+       "registration_endpoint": "https://pds-provider.example/pds/register",
+       "credential_endpoint": "https://pds-provider.example/pds/credentials"
+     }
+     ```
+
+4. **Service Registration**
    - Check if FEP service is already registered with this PDS provider
    - If not registered, initiate registration process
+   - Maintain a mapping of PDS providers to registration status
 
 ### 2. PDS Registration Process
 
 1. **Registration API Endpoint**
    - Endpoint: `POST https://{pds-url}/pds/register`
+   - Note: The actual endpoint may vary by PDS provider; use the endpoint from service discovery
    - Headers:
      ```
      Content-Type: application/json
@@ -170,7 +194,8 @@ The integration with PDS allows for a more streamlined application process by le
          "read:credentials",
          "verify:credentials"
        ],
-       "redirectUrl": "https://fep.example.org/pds/callback"
+       "redirectUrl": "https://fep.example.org/pds/callback",
+       "challengeEndpoint": "https://fep.example.org/pds/did-challenge"
      }
      ```
    - Response:
@@ -178,14 +203,92 @@ The integration with PDS allows for a more streamlined application process by le
      {
        "registrationId": "reg-550e8400-e29b-41d4-a716-446655440000",
        "status": "pending",
-       "verificationRequired": true
+       "verificationRequired": true,
+       "challenge": "challenge-550e8400-e29b-41d4-a716-446655440000"
+     }
+     ```
+   - Error handling: The implementation must gracefully handle different response formats from various PDS providers
+
+2. **DID Verification Challenge-Response Process**
+
+   The PDS system uses a challenge-response protocol to verify that the FEP service owns and controls the claimed DID. This process ensures that only legitimate services can register with the PDS.
+   
+   a. **Challenge Endpoint Setup**
+   - Implement a challenge endpoint in the FEP service: `POST /pds/did-challenge`
+   - This endpoint must be publicly accessible at the URL provided in the registration request
+   - Support multiple challenge formats from different PDS providers:
+     - Standard JWT-based challenges
+     - Plain string challenges
+     - Structured JSON challenges
+
+   b. **Challenge Request from PDS**
+   - After registration request, the PDS will send a challenge to the FEP service
+   - Request format (may vary by PDS provider):
+     ```
+     POST https://fep.example.org/pds/did-challenge
+     Content-Type: application/json
+     
+     {
+       "registrationId": "reg-550e8400-e29b-41d4-a716-446655440000",
+       "challenge": "challenge-550e8400-e29b-41d4-a716-446655440000",
+       "timestamp": "2025-07-19T10:30:15Z",
+       "pdsUrl": "https://pds.example.org"
      }
      ```
 
-2. **Service Key Generation**
+   c. **Challenge Verification Implementation**
+   - The FEP service must implement the following workflow:
+     1. Validate the incoming challenge request
+     2. Extract the challenge value (accounting for different formats)
+     3. Sign the challenge with the private key corresponding to the DID
+     4. Format the response according to the PDS provider's expected format
+     5. Return the signed challenge in the response
+   - Implement a pluggable architecture for different challenge-response protocols
+
+   d. **Challenge Response**
+   - Standard response format (adapt as needed for different PDS providers):
+     ```json
+     {
+       "registrationId": "reg-550e8400-e29b-41d4-a716-446655440000",
+       "serviceDid": "did:web:fep.example.org",
+       "signature": {
+         "type": "Ed25519Signature2020",
+         "created": "2025-07-19T10:30:20Z",
+         "verificationMethod": "did:web:fep.example.org#key-1",
+         "proofPurpose": "authentication",
+         "proofValue": "base64EncodedSignatureOfChallenge"
+       }
+     }
+     ```
+   - Alternative JWT response format:
+     ```
+     eyJhbGciOiJFZERTQSIsImtpZCI6ImRpZDp3ZWI6ZmVwLmV4YW1wbGUub3JnI2tleS0xIn0.eyJyZWdpc3RyYXRpb25JZCI6InJlZy01NTBlODQwMC1lMjliLTQxZDQtYTcxNi00NDY2NTU0NDAwMDAiLCJjaGFsbGVuZ2UiOiJjaGFsbGVuZ2UtNTUwZTg0MDAtZTI5Yi00MWQ0LWE3MTYtNDQ2NjU1NDQwMDAwIiwiaWF0IjoxNzI0MDE2NjIwLCJleHAiOjE3MjQwMTY5MjB9.signature
+     ```
+
+   e. **Challenge Completion**
+   - After the PDS verifies the signature, it will update the registration status
+   - The FEP service should poll the registration status endpoint until verification is complete:
+     ```
+     GET https://{pds-url}/pds/register/{registrationId}/status
+     ```
+   - Response example:
+     ```json
+     {
+       "registrationId": "reg-550e8400-e29b-41d4-a716-446655440000",
+       "status": "verified",
+       "verificationTimestamp": "2025-07-19T10:30:45Z"
+     }
+     ```
+   - Implement exponential backoff for status polling to avoid overloading the PDS
+
+3. **Service Key Generation**
    - Generate RSA key pair for PDS communication
    - Store private key securely in environment variables or secure key storage
-   - Public key format for registration:
+   - Support multiple key types based on PDS provider requirements:
+     - RSA (2048/4096 bit)
+     - Ed25519
+     - secp256k1 (for blockchain compatibility)
+   - Public key format for registration (RSA example):
      ```json
      {
        "kid": "key-1",
@@ -196,22 +299,67 @@ The integration with PDS allows for a more streamlined application process by le
        "e": "AQAB"
      }
      ```
+   - Ed25519 example:
+     ```json
+     {
+       "kid": "key-2",
+       "kty": "OKP",
+       "crv": "Ed25519",
+       "use": "sig",
+       "x": "..."
+     }
+     ```
+   - Ensure the key is included in the DID document at `https://fep.example.org/.well-known/did.json`
+   - Sample DID document structure:
+     ```json
+     {
+       "@context": ["https://www.w3.org/ns/did/v1"],
+       "id": "did:web:fep.example.org",
+       "verificationMethod": [{
+         "id": "did:web:fep.example.org#key-1",
+         "type": "JsonWebKey2020",
+         "controller": "did:web:fep.example.org",
+         "publicKeyJwk": {
+           "kid": "key-1",
+           "kty": "RSA",
+           "alg": "RS256",
+           "use": "sig",
+           "n": "...",
+           "e": "AQAB"
+         }
+       }],
+       "authentication": ["did:web:fep.example.org#key-1"],
+       "assertionMethod": ["did:web:fep.example.org#key-1"]
+     }
+     ```
+   - Implement key rotation procedures with appropriate overlapping validity periods
 
-3. **Registration Storage**
+4. **Registration Storage**
    - Store registration details in a secure database collection
+   - Implement provider-specific adapters to handle variations in PDS protocols
    - Data model:
      ```json
      {
        "pdsProvider": "solidcommunity.net",
+       "pdsDiscoveryUrl": "https://solidcommunity.net/.well-known/solid",
        "registrationId": "reg-550e8400-e29b-41d4-a716-446655440000",
        "serviceDid": "did:web:fep.example.org",
        "registrationTimestamp": "2025-07-19T10:30:00Z",
+       "verificationTimestamp": "2025-07-19T10:30:45Z",
        "status": "active",
        "accessToken": "...",
        "refreshToken": "...",
-       "expiresAt": "2025-07-19T11:30:00Z"
+       "expiresAt": "2025-07-19T11:30:00Z",
+       "endpoints": {
+         "token": "https://solidcommunity.net/token",
+         "authorization": "https://solidcommunity.net/auth",
+         "credentials": "https://solidcommunity.net/pds/credentials"
+       },
+       "providerCapabilities": ["openid", "dpop", "credential-api-1.0"]
      }
      ```
+   - Encrypt sensitive fields such as tokens in the database
+   - Implement token refresh logic to maintain continuous access
 
 ### 3. SOLID OIDC Authentication Flow
 
@@ -219,11 +367,21 @@ The integration with PDS allows for a more streamlined application process by le
    - Redirect the user to the PDS OIDC authentication endpoint
    - URL format: `https://{pds-url}/auth?client_id={serviceDid}&redirect_uri={redirectUrl}&response_type=code&scope=openid%20profile%20offline_access&state={state}`
    - The `state` parameter should be a secure random value stored in the session
+   - Implement PKCE (Proof Key for Code Exchange) for enhanced security:
+     - Generate a code verifier: 43-128 characters from the URL-safe Base64 alphabet
+     - Create a code challenge: Base64URL(SHA256(code_verifier))
+     - Add `code_challenge` and `code_challenge_method=S256` to the authorization URL
+   - Support Dynamic Client Registration if the PDS provider requires it
 
 2. **Authentication Callback**
    - Callback endpoint: `GET https://fep.example.org/pds/callback`
    - Extract authorization code from query parameters
    - Validate state parameter matches stored value
+   - Implement comprehensive error handling for various error responses:
+     - access_denied: User declined authorization
+     - invalid_request: Malformed request
+     - server_error: PDS internal error
+     - temporarily_unavailable: PDS service unavailable
 
 3. **Token Exchange**
    - Exchange authorization code for access token
@@ -237,8 +395,13 @@ The integration with PDS allows for a more streamlined application process by le
      grant_type=authorization_code&
      code={authorization_code}&
      redirect_uri={redirectUrl}&
-     client_id={serviceDid}
+     client_id={serviceDid}&
+     code_verifier={code_verifier}
      ```
+   - For PDS providers requiring client authentication, include appropriate credentials
+   - Support DPoP (Demonstrating Proof of Possession) for enhanced security:
+     - Generate a DPoP proof JWT
+     - Include a `DPoP` header with the token request
    - Response:
      ```json
      {
@@ -249,23 +412,50 @@ The integration with PDS allows for a more streamlined application process by le
        "expires_in": 3600
      }
      ```
+   - Parse and validate the ID token according to OIDC specifications
 
-4. **User Redirection**
+4. **Token Refresh Mechanism**
+   - Implement automatic token refresh before expiration
+   - Endpoint: `POST https://{pds-url}/token`
+   - Request Body:
+     ```
+     grant_type=refresh_token&
+     refresh_token={refresh_token}&
+     client_id={serviceDid}
+     ```
+   - Update stored tokens with new values
+   - Handle refresh failures with appropriate fallbacks
+
+5. **User Redirection**
    - After successful authentication, redirect the user back to the evidence upload page
    - Include a query parameter to indicate successful PDS connection
    - Example: `https://fep.example.org/application/{applicationId}/evidence?pds_connected=true`
+   - Store the connection details for the current session
 
 ## Verifiable Credential Management
 
 ### 1. Retrieving Verifiable Credentials
 
-1. **Credentials List API**
-   - Endpoint: `GET https://{pds-url}/pds/credentials`
+1. **PDS Provider Detection**
+   - Implement provider detection logic to adapt credential retrieval to different PDS implementations
+   - Support for known provider patterns:
+     - Standard Solid PDS providers (solidcommunity.net, inrupt.net)
+     - Self-hosted Solid servers
+     - Custom PDS implementations with compatible APIs
+   - Feature detection to gracefully handle varying capabilities
+
+2. **Credentials List API**
+   - Base endpoint: `GET https://{pds-url}/pds/credentials`
+   - For providers with different endpoint structures, use the discovered endpoint
    - Headers:
      ```
      Authorization: Bearer {access_token}
      ```
-   - Response:
+   - Optional DPoP header for providers requiring proof of possession:
+     ```
+     DPoP: eyJhbGciOiJFUzI1NiIsImp3ayI6eyJjcnYiOiJQLTI1NiIsImt0eSI6IkVDIiwieCI6IiIsInkiOiIifX0...
+     ```
+   - Response handling for various provider formats:
      ```json
      {
        "credentials": [
@@ -286,13 +476,39 @@ The integration with PDS allows for a more streamlined application process by le
        ]
      }
      ```
+   - Alternative format support:
+     ```json
+     {
+       "items": [
+         {
+           "credential_id": "credential-123",
+           "credential_type": ["VerifiableCredential", "DeathCertificateCredential"],
+           "issuer": "did:web:dro.example.org",
+           "holder": "did:web:username.solidcommunity.net",
+           "issued_at": "2025-06-01T11:30:00Z"
+         }
+       ],
+       "total": 2,
+       "page": 1,
+       "pages": 1
+     }
+     ```
+   - Implement paging support using query parameters:
+     ```
+     GET https://{pds-url}/pds/credentials?page=1&limit=10
+     ```
 
-2. **Credential Detail API**
-   - Endpoint: `GET https://{pds-url}/pds/credentials/{credentialId}`
+3. **Credential Detail API**
+   - Base endpoint: `GET https://{pds-url}/pds/credentials/{credentialId}`
    - Headers:
      ```
      Authorization: Bearer {access_token}
      ```
+   - Error handling for various HTTP status codes:
+     - 401: Authentication error
+     - 403: Authorization error
+     - 404: Credential not found
+     - 429: Rate limiting
    - Response:
      ```json
      {
@@ -337,11 +553,36 @@ The integration with PDS allows for a more streamlined application process by le
 1. **VC Selection and Upload**
    - Display available VCs to the user with relevant details (type, issuer, date)
    - Allow selection of one or more VCs to import
+   - Implement type filtering based on the application needs:
+     - Allow for keyword-based or fuzzy matching for credentials with varying type schemas
+     - Support credential schema detection from different issuers
    - For each selected VC:
      - Check if already associated with the application
      - If new, add to the application's VC structure
+   - Provide a preview of each credential's contents before import
 
-2. **VC Data Model**
+2. **Credential Schema Normalization**
+   - Implement schema mapping to handle different VC formats from various issuers
+   - Create adapter pattern to normalize different credential schemas:
+     ```javascript
+     class CredentialAdapter {
+       static adapt(credential) {
+         if (credential.type.includes('DeathCertificateCredential')) {
+           return new DeathCertificateAdapter(credential);
+         } else if (credential.type.includes('ElectricityBillCredential')) {
+           return new ElectricityBillAdapter(credential);
+         }
+         // Default adapter for unknown types
+         return new GenericCredentialAdapter(credential);
+       }
+     }
+     ```
+   - Handle edge cases:
+     - Missing required fields
+     - Different date formats
+     - Nested credential structures
+
+3. **VC Data Model**
    - Each verifiable credential must be stored with the following information:
    ```json
    {
@@ -350,27 +591,87 @@ The integration with PDS allows for a more streamlined application process by le
      "issuer": "did:web:dro.example.org",
      "importTimestamp": "2025-07-19T13:30:00Z",
      "verified": true,
+     "rawCredential": {
+       /* Original credential JSON */
+     },
+     "normalizedData": {
+       "deceasedName": "John Smith",
+       "dateOfDeath": "2025-05-20",
+       "deathRegistrationNumber": "DRO123456789"
+     },
      "matchedFields": [
        {
          "formField": "deceasedName",
          "extractedValue": "John Smith",
-         "source": "credential.credentialSubject.deceasedPerson.name"
+         "source": "credential.credentialSubject.deceasedPerson.name",
+         "confidence": 0.95
        },
        {
          "formField": "dateOfDeath",
          "extractedValue": "2025-05-20",
-         "source": "credential.credentialSubject.deceasedPerson.dateOfDeath"
+         "source": "credential.credentialSubject.deceasedPerson.dateOfDeath",
+         "confidence": 1.0
        }
      ]
    }
    ```
+   - Implement versioning for the credential data model to handle future changes
 
-3. **Field Mapping Logic**
-   - For Death Certificate Credentials:
-     - Map `credential.credentialSubject.deceasedPerson.name` to `application.deceasedName`
-     - Map `credential.credentialSubject.deceasedPerson.dateOfBirth` to `application.deceasedDateOfBirth`
-     - Map `credential.credentialSubject.deceasedPerson.dateOfDeath` to `application.dateOfDeath`
-     - Map `credential.credentialSubject.deceasedPerson.registrationNumber` to `application.deathRegistrationNumber`
+4. **Field Mapping Logic**
+   - Use a configurable mapping system to handle different credential types:
+   ```json
+   {
+     "DeathCertificateCredential": {
+       "deceasedName": [
+         "credentialSubject.deceasedPerson.name",
+         "credentialSubject.deceased.fullName"
+       ],
+       "deceasedDateOfBirth": [
+         "credentialSubject.deceasedPerson.dateOfBirth",
+         "credentialSubject.deceased.birthDate"
+       ],
+       "dateOfDeath": [
+         "credentialSubject.deceasedPerson.dateOfDeath",
+         "credentialSubject.deceased.deathDate",
+         "credentialSubject.deathDetails.date"
+       ],
+       "deathRegistrationNumber": [
+         "credentialSubject.deceasedPerson.registrationNumber",
+         "credentialSubject.deceased.registrationId",
+         "credentialSubject.registrationDetails.id"
+       ]
+     },
+     "ElectricityBillCredential": {
+       "accountHolder": [
+         "credentialSubject.customer.name",
+         "credentialSubject.accountHolder"
+       ],
+       "accountNumber": [
+         "credentialSubject.account.number",
+         "credentialSubject.accountId"
+       ],
+       "billingAddress": [
+         "credentialSubject.customer.address",
+         "credentialSubject.serviceAddress"
+       ]
+     }
+   }
+   ```
+   - Implement a fallback system for when direct mappings fail
+   - Use fuzzy matching for similar field names across different credential schemas
+
+5. **Verification and Trust**
+   - Implement credential verification logic:
+     - Signature validation
+     - Issuer DID resolution and validation
+     - Expiration and revocation checking
+   - Display verification status to the user
+   - Maintain a configurable trusted issuer list
+   - Allow administrators to add new trusted issuers
+   - Implement revocation checking via:
+     - Status list 2021
+     - Revocation lists
+     - OCSP-style endpoints
 
    - For Utility Bill Credentials:
      - Map `credential.credentialSubject.address` to `application.address`
@@ -458,7 +759,7 @@ DELETE /api/applications/{applicationId}/credentials/{vcId}  # Remove credential
 
 ## Data Models
 
-### Application Form Model
+### Example Application Form Model
 
 ```json
 {

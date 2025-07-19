@@ -23,4 +23,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 EXPOSE 5050
-CMD ["python", "ai_agent/main.py"]
+CMD ["python", "ai_agent/extract_api.py"]

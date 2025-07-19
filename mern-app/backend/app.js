@@ -8,6 +8,8 @@ const formRoutes = require("./routes/formRoutes");
 const evidenceRoutes = require("./routes/evidenceRoutes");
 const aiAgentRoutes = require("./routes/aiAgentRoutes");
 const testRoutes = require("./routes/testRoutes");
+const pdsRoutes = require("./routes/pdsRoutes");
+const pdsCredentialRoutes = require("./routes/pdsCredentialRoutes");
 
 dotenv.config();
 
@@ -53,6 +55,8 @@ app.use("/api/forms", formRoutes);
 app.use("/api/evidence", evidenceRoutes);
 app.use("/api/ai-agent", aiAgentRoutes);
 app.use("/api/test", testRoutes);
+app.use("/api/pds", pdsRoutes);
+app.use("/api/credentials", pdsCredentialRoutes);
 // Serve uploaded evidence files statically
 const path = require("path");
 // Fix path to uploads folder - evidence files are now organized by user ID

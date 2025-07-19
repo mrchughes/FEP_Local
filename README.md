@@ -12,14 +12,22 @@ This repository contains the Financial Entitlement Platform application, which h
   - **defect_log.md**: Log of defects and their fixes
   - **test-results.md**: Results from testing sessions
   - **PDS-Integration-Strategy.md**: Strategy for Personal Data Store integration
+  - **PDS-Integration-Implementation.md**: Implementation details for PDS integration
 - **scripts/**: Utility scripts
   - **startup.sh**: Project startup script
   - **test-upload.sh**: Script for testing file uploads
-  - **test-upload-2.sh**: Alternative file upload test script
+  - **test-pds-integration.sh**: Script for testing PDS integration
   - Other utility scripts
 - **Requirements/**: Project requirements and specifications
 - **shared-evidence/**: Test evidence files for development
 - **dev/**: Development and testing files
+
+## Key Features
+
+1. **Funeral Expenses Application**: Main application for applying for funeral expenses payment
+2. **Document Upload and Processing**: Upload and process supporting documents
+3. **AI-powered Data Extraction**: Extract data from documents using AI
+4. **Personal Data Store Integration**: Connect to PDS for secure data management
 
 ## Setup and Running
 

@@ -3,9 +3,12 @@
     "version": "1.0.1",
     "private": true,
     "dependencies": {
+        "@mui/icons-material": "^5.15.13",
+        "@mui/material": "^5.15.13",
         "axios": "^1.10.0",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
+        "react-json-pretty": "^2.2.0",
         "react-router-dom": "^6.14.1",
         "react-scripts": "^5.0.0"
     },

@@ -154,6 +154,36 @@ const DashboardPage = () => {
                             </div>
                         </div>
 
+                        <div className="govuk-summary-card">
+                            <div className="govuk-summary-card__title-wrapper">
+                                <h3 className="govuk-summary-card__title">Personal Data Store</h3>
+                            </div>
+                            <div className="govuk-summary-card__content">
+                                <div className="govuk-summary-card__body">
+                                    <p className="govuk-body">
+                                        Connect to your Personal Data Store to securely manage your data and credentials.
+                                    </p>
+                                    <p className="govuk-body">
+                                        A Personal Data Store lets you:
+                                    </p>
+                                    <ul className="govuk-list govuk-list--bullet">
+                                        <li>Store your form data securely in your own personal storage</li>
+                                        <li>Manage access to your personal information</li>
+                                        <li>Reuse your verified information across different services</li>
+                                    </ul>
+                                    <Link
+                                        to="/pds-settings"
+                                        role="button"
+                                        draggable="false"
+                                        className="govuk-button"
+                                        data-module="govuk-button"
+                                    >
+                                        Manage PDS Settings
+                                    </Link>
+                                </div>
+                            </div>
+                        </div>
+
                         <h2 className="govuk-heading-m">Help and support</h2>
 
                         <div className="govuk-inset-text">

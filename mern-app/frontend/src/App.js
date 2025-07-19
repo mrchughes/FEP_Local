@@ -8,6 +8,8 @@ import TaskListPage from "./pages/TaskListPage";
 import ReviewPage from "./pages/ReviewPage";
 import ConfirmationPage from "./pages/ConfirmationPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
+import PDSSettingsPage from "./pages/PDSSettingsPage";
+import PDSConnectedSuccess from "./pages/PDSConnectedSuccess";
 import Navbar from "./components/Navbar";
 import PrivateRoute from "./auth/PrivateRoute";
 import "./styles/govuk-overrides.css";
@@ -58,6 +60,8 @@ const App = () => {
                             <Route path="/tasks" element={<PrivateRoute><TaskListPage /></PrivateRoute>} />
                             <Route path="/review" element={<PrivateRoute><ReviewPage /></PrivateRoute>} />
                             <Route path="/confirmation" element={<PrivateRoute><ConfirmationPage /></PrivateRoute>} />
+                            <Route path="/pds-settings" element={<PrivateRoute><PDSSettingsPage /></PrivateRoute>} />
+                            <Route path="/pds-connected-success" element={<PrivateRoute><PDSConnectedSuccess /></PrivateRoute>} />
                         </Routes>
                     </main>
                 </div>
