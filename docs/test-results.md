@@ -4,10 +4,43 @@
 - Created test user:
   - Email: testfep@example.com
   - Password: testpass123
+- Generated test token for direct API testing
 
 ### API Testing Results
 1. **User Registration**: Successful ✅
    - Successfully created a new user account
+2. **Authentication**: Successful ✅
+   - JWT tokens are properly verified
+   - User must exist in the database for token to be valid
+
+3. **AI Extraction API**: Successful ✅
+   - Direct extraction from AI agent works correctly
+   - Successfully extracts data from PNG files
+   - Returns structured JSON with field values and reasoning
+
+4. **File Upload**: Successful ✅
+   - Files uploaded to `/app/uploads/evidence/`
+   - Files synced to shared volume `/shared-evidence/`
+
+### AI Extraction Details
+- Extraction successfully identifies:
+  - Names (first name, last name)
+  - Dates (death, birth, certificate issue)
+  - Locations (place of death, address)
+  - Relationships (partner, informant)
+  - Document type (death certificate)
+
+### Test Files
+1. `A_scanned_death_certificate_for_Brian_Hughes_is_pr.png` (original)
+2. `test_death_cert.png` (renamed copy)
+
+Both files were successfully processed by the AI extraction system, demonstrating that the system can handle different filename formats.
+
+### Notes
+- The AI agent can be tested directly without authentication
+- Authentication tokens require valid users in the database
+- Backend logs show successful API calls and data extraction
+- File sync warnings don't affect core functionality
 
 2. **User Login**: Successful ✅
    - Successfully authenticated with the created user credentials
