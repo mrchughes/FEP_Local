@@ -32,3 +32,14 @@ This repository contains the Financial Entitlement Platform application, which h
 ## Setup and Running
 
 See `docker-compose.yml` for the container setup and dependencies.
+
+## Development Setup
+
+This project uses Python with a virtual environment (.venv). When opening in VS Code, the settings have been configured to use the Python interpreter from the virtual environment.
+
+If you need to manually set up the environment:
+
+1. Create a virtual environment: `python -m venv .venv`
+2. Activate the environment: `source .venv/bin/activate` (macOS/Linux) or `.venv\Scriptsctivate` (Windows)
+3. Install dependencies: `pip install -r requirements.txt`
+

@@ -58,3 +58,4 @@ coverage/
 # ChromaDB files
 python-app/app/ai_agent/chroma_db/
 python-app/app/ai_agent/chroma_db_backup_*/
+.venv/
