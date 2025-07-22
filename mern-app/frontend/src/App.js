@@ -10,6 +10,7 @@ import ConfirmationPage from "./pages/ConfirmationPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import PDSSettingsPage from "./pages/PDSSettingsPage";
 import PDSConnectedSuccess from "./pages/PDSConnectedSuccess";
+import OneLoginCallback from "./components/OneLoginCallback";
 import Navbar from "./components/Navbar";
 import PrivateRoute from "./auth/PrivateRoute";
 import "./styles/govuk-overrides.css";
@@ -55,6 +56,7 @@ const App = () => {
                             <Route path="/login" element={<LoginPage />} />
                             <Route path="/reset-password" element={<ResetPasswordPage />} />
                             <Route path="/register" element={<RegisterPage />} />
+                            <Route path="/auth/onelogin-callback" element={<OneLoginCallback />} />
                             <Route path="/dashboard" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
                             <Route path="/form" element={<PrivateRoute><FormPage /></PrivateRoute>} />
                             <Route path="/tasks" element={<PrivateRoute><TaskListPage /></PrivateRoute>} />

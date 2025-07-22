@@ -170,5 +170,38 @@ module.exports = {
     getCredentials,
     createFormDataCredential,
     processFormData,
-    getFormDataFromCredentials
+    getFormDataFromCredentials,
+    getCredentialById
 };
+
+/**
+ * Get a specific credential by ID from the user's PDS
+ * @param {string} customerId - The user's ID
+ * @param {string} credentialId - The ID of the credential to retrieve
+ * @returns {Object} - The credential if found, null otherwise
+ */
+async function getCredentialById(customerId, credentialId) {
+    try {
+        // Get active session
+        const session = await pdsAuthService.getActiveSession(customerId);
+        if (!session) {
+            throw new Error('No active PDS session found');
+        }
+
+        // Extract PDS data URL from WebID
+        const pdsUrl = extractPdsUrl(session.webId);
+        const credentialEndpoint = `${pdsUrl}/credentials/${encodeURIComponent(credentialId)}`;
+
+        // Get the specific credential from PDS
+        const response = await axios.get(
+            credentialEndpoint,
+            { headers: buildAuthHeaders(session) }
+        );
+
+        return response.data;
+    } catch (error) {
+        console.error(`Error retrieving credential ${credentialId} from PDS:`, error);
+        // Return null instead of throwing, so caller can handle missing credential gracefully
+        return null;
+    }
+}

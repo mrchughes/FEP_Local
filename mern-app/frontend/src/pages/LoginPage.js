@@ -2,6 +2,7 @@ import React, { useState, useContext } from "react";
 import { Link } from "react-router-dom";
 import AuthContext from "../auth/AuthContext";
 import { login } from "../api";
+import OneLoginButton from "../components/OneLoginButton";
 
 const LoginPage = () => {
     const [formData, setFormData] = useState({ email: "", password: "" });
@@ -160,6 +161,15 @@ const LoginPage = () => {
                                 {loading ? "Signing in..." : "Sign in"}
                             </button>
                         </form>
+
+                        <div className="govuk-inset-text">
+                            <h3 className="govuk-heading-s">Government users</h3>
+                            <p className="govuk-body">
+                                If you have a GOV.UK account, you can use it to sign in:
+                            </p>
+                            <OneLoginButton />
+                        </div>
+
                         <p style={{ marginTop: 24 }}>
                             <Link to="/reset-password" className="govuk-link">Forgot your password?</Link>
                         </p>

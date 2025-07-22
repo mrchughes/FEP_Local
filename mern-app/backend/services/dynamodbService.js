@@ -25,9 +25,15 @@ const createUser = async (user) => {
       email: user.email,
       name: user.name,
       password: user.password,
+      webId: user.webId,
+      isOneLoginUser: user.isOneLoginUser,
+      oneLoginSubject: user.oneLoginSubject,
+      oneLoginMetadata: user.oneLoginMetadata,
+      pdsTokens: user.pdsTokens
     });
     await newUser.save();
     console.log(`[DB] User created successfully: ${user.email}`);
+    return newUser;
   } catch (error) {
     console.error("[DB] Error creating user:", error);
     throw new Error("Failed to create user");
@@ -104,4 +110,40 @@ const clearFormData = async (email) => {
   }
 };
 
-module.exports = { createUser, findUserByEmail, saveFormData, getFormData, clearFormData };
+const updateUser = async (user) => {
+  try {
+    console.log(`[DB] Updating user with email: ${user.email}`);
+    const result = await User.updateOne(
+      { email: user.email },
+      {
+        $set: {
+          name: user.name,
+          webId: user.webId,
+          isOneLoginUser: user.isOneLoginUser,
+          oneLoginSubject: user.oneLoginSubject,
+          oneLoginMetadata: user.oneLoginMetadata,
+          pdsTokens: user.pdsTokens,
+          updatedAt: new Date()
+        }
+      }
+    );
+
+    console.log(`[DB] User update result:`,
+      result.acknowledged ? 'Acknowledged' : 'Not acknowledged',
+      `Matched: ${result.matchedCount}`,
+      `Modified: ${result.modifiedCount}`
+    );
+
+    if (result.matchedCount === 0) {
+      console.warn(`[DB] Warning: No user found with email ${user.email}`);
+      return null;
+    }
+
+    return await User.findOne({ email: user.email });
+  } catch (error) {
+    console.error("[DB] Error updating user:", error);
+    throw new Error("Failed to update user");
+  }
+};
+
+module.exports = { createUser, findUserByEmail, saveFormData, getFormData, clearFormData, updateUser };

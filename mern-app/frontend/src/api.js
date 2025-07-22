@@ -64,6 +64,15 @@ export const login = async (userData) => {
     }
 };
 
+export const validateOneLoginToken = async (token) => {
+    try {
+        const res = await axios.post('/auth/onelogin-validate', { token });
+        return res.data;
+    } catch (error) {
+        throw new Error(error.response?.data?.message || 'OneLogin validation failed');
+    }
+};
+
 export const submitForm = async (formData, token) => {
     try {
         const res = await api.post('/forms/submit', formData, {

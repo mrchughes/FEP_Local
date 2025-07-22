@@ -3,6 +3,8 @@ const axios = require('axios');
 const url = require('url');
 const crypto = require('crypto');
 const PDSRegistration = require('../models/pdsRegistration');
+const { findUserByEmail } = require('./dynamodbService');
+const oneloginOAuthClientService = require('./oneloginOAuthClientService');
 
 /**
  * Extract PDS URL from WebID
@@ -40,7 +42,7 @@ const generateRsaKeyPair = async () => {
                 return;
             }
 
-            // Convert PEM to JWK format
+            // Convert PEM to JWK format (in a real implementation, this would use a proper JWK library)
             const publicKeyJwk = {
                 kid: "key-1",
                 kty: "RSA",
@@ -98,14 +100,18 @@ const registerWithProvider = async (pdsUrl) => {
             headers: { 'Content-Type': 'application/json' }
         });
 
+        // Check if verification is required
+        const registrationResult = response.data;
+        console.log('PDS Registration result:', registrationResult);
+
         // Store registration in database
         const registration = new PDSRegistration({
             pdsProvider: new URL(pdsUrl).hostname,
             pdsDiscoveryUrl: discoveryUrl,
-            registrationId: response.data.registrationId,
+            registrationId: registrationResult.registrationId,
             serviceDid,
             registrationTimestamp: new Date(),
-            status: response.data.status,
+            status: registrationResult.status || 'pending',
             publicKey: keyPair.publicKeyJwk,
             keyId: `vault:/keys/pds-${new URL(pdsUrl).hostname}`,
             endpoints: {
@@ -117,6 +123,46 @@ const registerWithProvider = async (pdsUrl) => {
         });
 
         await registration.save();
+
+        // If verification is required, we need to handle DID challenge-response
+        if (registrationResult.verificationRequired && registrationResult.challenge) {
+            console.log('Verification required for PDS registration. Challenge will be handled by DID challenge endpoint.');
+
+            // The PDS will call our challenge endpoint with the challenge
+            // We'll handle that in the didChallengeController
+
+            // For testing, we'll poll the status a few times to see if verification completes
+            let attempts = 0;
+            const maxAttempts = 5;
+            const delay = 2000; // 2 seconds initial delay
+
+            while (attempts < maxAttempts) {
+                attempts++;
+                console.log(`Checking verification status (attempt ${attempts}/${maxAttempts})...`);
+
+                try {
+                    // Wait with exponential backoff
+                    await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, attempts - 1)));
+
+                    // Check status
+                    const statusUrl = `${pdsUrl}/pds/register/${registrationResult.registrationId}/status`;
+                    const statusResponse = await axios.get(statusUrl);
+
+                    console.log('Verification status:', statusResponse.data);
+
+                    if (statusResponse.data.status === 'verified' || statusResponse.data.status === 'active') {
+                        // Update registration status
+                        registration.status = statusResponse.data.status;
+                        registration.verificationTimestamp = new Date();
+                        await registration.save();
+                        break;
+                    }
+                } catch (statusError) {
+                    console.error('Error checking verification status:', statusError.message);
+                }
+            }
+        }
+
         return registration;
     } catch (err) {
         console.error('PDS registration error:', err.message);
@@ -133,8 +179,83 @@ const getRegistrationByProvider = async (pdsProvider) => {
     return await PDSRegistration.findOne({ pdsProvider });
 };
 
+/**
+ * Get credentials from PDS using OneLogin tokens
+ * @param {string} email - The user's email
+ * @param {string} credentialType - The type of credential to get
+ * @returns {Object} - The credentials from the PDS
+ */
+const getCredentialsWithOneLogin = async (email, credentialType) => {
+    try {
+        // Find user by email
+        const user = await findUserByEmail(email);
+        if (!user) {
+            throw new Error('User not found');
+        }
+
+        // Check if user has PDS tokens
+        if (!user.pdsTokens || !user.pdsTokens.accessToken) {
+            throw new Error('No PDS tokens found for user');
+        }
+
+        let accessToken = user.pdsTokens.accessToken;
+
+        // Check if token is expired
+        if (new Date(user.pdsTokens.expiresAt) < new Date()) {
+            // Token is expired, try to refresh
+            if (!user.pdsTokens.refreshToken) {
+                throw new Error('No refresh token available');
+            }
+
+            try {
+                const newTokens = await oneloginOAuthClientService.refreshToken(user.pdsTokens.refreshToken);
+
+                // Update user with new tokens
+                user.pdsTokens = {
+                    accessToken: newTokens.access_token,
+                    refreshToken: newTokens.refresh_token,
+                    expiresAt: new Date(Date.now() + newTokens.expires_in * 1000).toISOString()
+                };
+                await user.save();
+
+                accessToken = newTokens.access_token;
+            } catch (refreshError) {
+                throw new Error('Failed to refresh token: ' + refreshError.message);
+            }
+        }
+
+        // Extract PDS URL from WebID
+        if (!user.webId) {
+            throw new Error('User has no WebID');
+        }
+
+        const pdsUrl = extractPdsUrl(user.webId);
+
+        // Discover PDS endpoints
+        const discoveryUrl = `${pdsUrl}/.well-known/solid`;
+        const discoveryResponse = await axios.get(discoveryUrl);
+        const endpoints = discoveryResponse.data;
+
+        const credentialEndpoint = endpoints.credential_endpoint || `${pdsUrl}/pds/credentials`;
+
+        // Get credentials from PDS
+        const response = await axios.get(`${credentialEndpoint}?type=${credentialType}`, {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Accept': 'application/json'
+            }
+        });
+
+        return response.data;
+    } catch (err) {
+        console.error('Error getting credentials with OneLogin:', err.message);
+        throw new Error(`Failed to get credentials: ${err.message}`);
+    }
+};
+
 module.exports = {
     extractPdsUrl,
     registerWithProvider,
-    getRegistrationByProvider
-};
+    getRegistrationByProvider,
+    getCredentialsWithOneLogin
+};;

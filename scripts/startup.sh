@@ -40,4 +40,14 @@ else
   echo "Cloudflare Tunnel is NOT running."
 fi
 
+# 5. List available test scripts
+echo "\n[INFO] Available test scripts:"
+echo "- test-upload.sh: Test file upload functionality"
+echo "- test-pds-integration.sh: Test PDS integration"
+echo "- test-credential-mapping.sh: Test credential field mapping"
+echo "- test-ai-agent.sh: Test AI agent for data extraction"
+echo "- test-evidence-upload.sh: Test evidence upload"
+echo "- test-extraction-api.sh: Test extraction API"
+
 echo "\n[INFO] Startup complete."
+echo "\n[INFO] To test credential field mapping, run: ./scripts/test-credential-mapping.sh"
