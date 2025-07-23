@@ -43,7 +43,12 @@ const OneLoginCallback = () => {
                         // Set user in context and redirect to dashboard
                         login({
                             token: tokenResponse.data.token,
-                            ...tokenResponse.data.user
+                            user: {
+                                name: tokenResponse.data.user.name,
+                                email: tokenResponse.data.user.email,
+                                webId: tokenResponse.data.user.webId,
+                                webIdAliases: tokenResponse.data.user.webIdAliases || []
+                            }
                         });
                         navigate('/dashboard');
                     } else {

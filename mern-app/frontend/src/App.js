@@ -10,6 +10,8 @@ import ConfirmationPage from "./pages/ConfirmationPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import PDSSettingsPage from "./pages/PDSSettingsPage";
 import PDSConnectedSuccess from "./pages/PDSConnectedSuccess";
+import EnhancedCredentialsPage from "./pages/EnhancedCredentialsPage";
+import MultiAudienceDemoPage from "./pages/MultiAudienceDemoPage";
 import OneLoginCallback from "./components/OneLoginCallback";
 import Navbar from "./components/Navbar";
 import PrivateRoute from "./auth/PrivateRoute";
@@ -64,6 +66,8 @@ const App = () => {
                             <Route path="/confirmation" element={<PrivateRoute><ConfirmationPage /></PrivateRoute>} />
                             <Route path="/pds-settings" element={<PrivateRoute><PDSSettingsPage /></PrivateRoute>} />
                             <Route path="/pds-connected-success" element={<PrivateRoute><PDSConnectedSuccess /></PrivateRoute>} />
+                            <Route path="/enhanced-credentials" element={<PrivateRoute><EnhancedCredentialsPage /></PrivateRoute>} />
+                            <Route path="/multi-audience-demo" element={<PrivateRoute><MultiAudienceDemoPage /></PrivateRoute>} />
                         </Routes>
                     </main>
                 </div>

@@ -94,6 +94,22 @@ export const autoSaveForm = async (formData, token) => {
     }
 };
 
+// Password reset endpoint
+export const resetPassword = async ({ email, newPassword }) => {
+    try {
+        const res = await api.post('/users/reset-password', { email, newPassword });
+        return res.data;
+    } catch (error) {
+        throw new Error(error.response?.data?.message || 'Password reset failed');
+    }
+};
+
+export default api;
+    } catch (error) {
+        throw new Error(error.response?.data?.message || 'Auto-save failed');
+    }
+};
+
 export const getResumeData = async (token) => {
     try {
         const res = await api.get('/forms/resume', {
@@ -107,18 +123,6 @@ export const getResumeData = async (token) => {
         if (error.response?.status === 404) {
             return null;
         }
-        throw new Error(error.response?.data?.message || 'Failed to get resume data');
+        throw new Error(error.response?.data?.message || 'Failed to fetch resume data');
     }
 };
-
-// Password reset endpoint
-export const resetPassword = async ({ email, newPassword }) => {
-    try {
-        const res = await api.post('/users/reset-password', { email, newPassword });
-        return res.data;
-    } catch (error) {
-        throw new Error(error.response?.data?.message || 'Password reset failed');
-    }
-};
-
-export default api;

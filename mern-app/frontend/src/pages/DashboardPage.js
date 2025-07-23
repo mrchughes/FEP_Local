@@ -10,6 +10,7 @@ import {
     STATUS
 } from "../utils/formProgress";
 import { formSections } from '../data/formStructure';
+import WebIdDisplay from "../components/WebIdDisplay";
 
 const DashboardPage = () => {
     const { user } = useContext(AuthContext);
@@ -163,6 +164,10 @@ const DashboardPage = () => {
                                     <p className="govuk-body">
                                         Connect to your Personal Data Store to securely manage your data and credentials.
                                     </p>
+
+                                    {/* WebID Display Component */}
+                                    <WebIdDisplay webId={user?.webId} webIdAliases={user?.webIdAliases} />
+
                                     <p className="govuk-body">
                                         A Personal Data Store lets you:
                                     </p>
@@ -180,6 +185,50 @@ const DashboardPage = () => {
                                     >
                                         Manage PDS Settings
                                     </Link>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="govuk-summary-card">
+                            <div className="govuk-summary-card__title-wrapper">
+                                <h3 className="govuk-summary-card__title">Enhanced PDS Features (New)</h3>
+                            </div>
+                            <div className="govuk-summary-card__content">
+                                <div className="govuk-summary-card__body">
+                                    <p className="govuk-body">
+                                        Try our new enhanced Personal Data Store features with multi-audience support.
+                                    </p>
+
+                                    <div className="govuk-inset-text">
+                                        <strong>What's new?</strong>
+                                        <ul className="govuk-list govuk-list--bullet">
+                                            <li>Connect to multiple PDS services at once</li>
+                                            <li>View credentials from different sources in one place</li>
+                                            <li>Improved form-filling with data from multiple services</li>
+                                            <li>Enhanced privacy with WebID alias support</li>
+                                        </ul>
+                                    </div>
+
+                                    <div className="govuk-button-group">
+                                        <Link
+                                            to="/enhanced-credentials"
+                                            role="button"
+                                            draggable="false"
+                                            className="govuk-button"
+                                            data-module="govuk-button"
+                                        >
+                                            Enhanced Credentials
+                                        </Link>
+                                        <Link
+                                            to="/multi-audience-demo"
+                                            role="button"
+                                            draggable="false"
+                                            className="govuk-button govuk-button--secondary"
+                                            data-module="govuk-button"
+                                        >
+                                            Multi-Audience Demo
+                                        </Link>
+                                    </div>
                                 </div>
                             </div>
                         </div>

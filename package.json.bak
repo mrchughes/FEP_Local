@@ -20,4 +20,22 @@
   "devDependencies": {
     "concurrently": "^8.2.0"
   }
+}lication",
+  "version": "1.0.0",
+  "description": "Funeral Expense Payment application with PDS integration",
+  "main": "index.js",
+  "scripts": {
+    "build": "chmod +x ./build-mern-app.sh && ./build-mern-app.sh",
+    "start": "cd mern-app/backend && npm start",
+    "start:frontend": "cd mern-app/frontend && npm start",
+    "start:all": "concurrently \"npm run start\" \"npm run start:frontend\"",
+    "test": "cd mern-app/backend && npm test"
+  },
+  "dependencies": {
+    "jsonwebtoken": "^9.0.2",
+    "mongodb": "^6.17.0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
 }

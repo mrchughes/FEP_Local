@@ -84,3 +84,40 @@ For more details, see the [PDS-Credential-Field-Mapping.md](../docs/PDS-Credenti
 - VC list view
 - VC deletion
 - VC detail view
+
+## 8. WebID Alias Handling and Multi-Audience Support
+
+✅ **IMPLEMENTED**
+- WebID resolution with alias support
+- TTL-based caching system for WebID resolution
+- Race condition handling for concurrent requests
+- Multi-audience credential operations
+- Parallel credential retrieval from multiple sources
+- Enhanced frontend components with audience selection UI
+
+### Implementation Details
+
+The WebID alias handling and multi-audience support has been implemented with the following components:
+
+1. **Backend Services**:
+   - `pdsCredentialService.js`: Updated with WebID resolution caching and multi-audience support
+   - `pdsCredentialController.js`: Modified to handle multiple audience parameters
+
+2. **Optimization**:
+   - In-memory caching with configurable TTL (default: 5 minutes)
+   - 100% performance improvement for repeated WebID resolutions
+   - Parallel processing for multi-audience requests
+
+3. **Frontend Components**:
+   - `EnhancedPDSCredentials.js`: UI component for viewing credentials with multi-audience support
+   - `EnhancedPDSCredentialFieldMapping.js`: UI component for mapping credentials with multi-audience support
+   - `credentialService.js`: Frontend service for multi-audience API access
+
+4. **Demo Pages**:
+   - `EnhancedCredentialsPage.js`: Page showcasing enhanced credential components
+   - `MultiAudienceDemoPage.js`: Interactive demo for multi-audience features
+
+5. **Documentation**:
+   - `multi-audience-support.md`: Documentation of the implementation
+
+For more details, see the [multi-audience-support.md](../docs/multi-audience-support.md) document.

@@ -4,5 +4,47 @@
 			"path": "."
 		}
 	],
-	"settings": {}
+	"settings": {
+		"editor.formatOnSave": true,
+		"editor.codeActionsOnSave": {
+			"source.fixAll.eslint": "true"
+		},
+		"files.exclude": {
+			"**/.git": true,
+			"**/.DS_Store": true,
+			"**/node_modules": true,
+			"**/dist": true,
+			"**/build": true
+		},
+		"search.exclude": {
+			"**/node_modules": true,
+			"**/dist": true,
+			"**/build": true
+		}
+	},
+	"launch": {
+		"configurations": [
+			{
+				"type": "node",
+				"request": "launch",
+				"name": "Launch Backend",
+				"skipFiles": [
+					"<node_internals>/**"
+				],
+				"program": "${workspaceFolder}/mern-app/backend/server.js",
+				"outFiles": [
+					"${workspaceFolder}/**/*.js"
+				]
+			}
+		]
+	},
+	"extensions": {
+		"recommendations": [
+			"dbaeumer.vscode-eslint",
+			"esbenp.prettier-vscode",
+			"ms-python.python",
+			"ms-azuretools.vscode-docker",
+			"mongodb.mongodb-vscode"
+		]
+	}
 }

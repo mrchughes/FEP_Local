@@ -40,8 +40,16 @@ export const AuthProvider = ({ children }) => {
     const login = (userData) => {
         console.log("🔐 AuthContext login called with userData:", userData); // Debug log
         if (userData && userData.token) {
+            // Ensure webIdAliases is included in the user data if available
+            const normalizedUserData = {
+                ...userData,
+                user: {
+                    ...userData.user,
+                    webIdAliases: userData.user?.webIdAliases || []
+                }
+            };
             console.log("🔐 AuthContext setting user and navigating to dashboard"); // Debug log
-            setUser(userData);
+            setUser(normalizedUserData);
             navigate("/dashboard");
         } else {
             console.error("🔐 AuthContext invalid user data for login - missing token or userData:", userData);

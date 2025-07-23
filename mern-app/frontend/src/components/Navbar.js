@@ -57,6 +57,28 @@ const Navbar = () => {
                     </p>
                 </div>
             </div>
+
+            {/* Navigation menu for enhanced pages */}
+            {user && (
+                <div className="govuk-width-container" style={{ marginTop: '20px', marginBottom: '10px' }}>
+                    <nav className="govuk-breadcrumbs">
+                        <ol className="govuk-breadcrumbs__list">
+                            <li className="govuk-breadcrumbs__list-item">
+                                <Link to="/dashboard" className="govuk-breadcrumbs__link">Dashboard</Link>
+                            </li>
+                            <li className="govuk-breadcrumbs__list-item">
+                                <Link to="/enhanced-credentials" className="govuk-breadcrumbs__link">Enhanced Credentials</Link>
+                            </li>
+                            <li className="govuk-breadcrumbs__list-item">
+                                <Link to="/multi-audience-demo" className="govuk-breadcrumbs__link">Multi-Audience Demo</Link>
+                            </li>
+                            <li className="govuk-breadcrumbs__list-item">
+                                <Link to="/pds-settings" className="govuk-breadcrumbs__link">PDS Settings</Link>
+                            </li>
+                        </ol>
+                    </nav>
+                </div>
+            )}
         </>
     );
 };

@@ -54,6 +54,22 @@ Verifiable credentials are used to store and retrieve form data:
 2. Authentication uses HTTPS for all communications
 3. State parameters are used to prevent CSRF attacks
 4. Token refresh is handled automatically when tokens expire
+5. WebID alias handling protects user privacy across different services
+
+## WebID Alias Handling
+
+With the integration of OneLogin as an identity provider, the system now supports audience-specific WebID aliases:
+
+1. **WebID Aliases**: Each user can have multiple WebID aliases, specific to different service audiences
+2. **Resolution**: The system resolves these aliases to the master WebID when needed
+3. **Privacy Protection**: Aliases prevent tracking users across different services
+4. **Credential Operations**: When storing or retrieving credentials, the appropriate WebID is used based on the audience
+5. **API Support**: All credential endpoints support the `audience` parameter to specify which WebID alias to use
+6. **Performance Optimization**: WebID resolution results are cached with TTL expiration for improved performance
+7. **Race Condition Handling**: Concurrent requests for the same WebID efficiently share resolution results
+8. **Multiple Audience Support**: Retrieve credentials from multiple services with a single request
+
+For detailed information about WebID alias handling, see [WebID-Alias-Handling.md](./WebID-Alias-Handling.md), [WebID-Caching.md](./WebID-Caching.md), and [Multiple-Audience-Support.md](./Multiple-Audience-Support.md).
 
 ## Testing
 

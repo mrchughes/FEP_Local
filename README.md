@@ -1,4 +1,124 @@
-# Financial Entitlement Platform
+# Funeral Expense Payment (FEP) Application
+
+This project is a web application for handling Funeral Expense Payment applications with integration to the Personal Data Store (PDS) system.
+
+## Architecture
+
+The application consists of the following components:
+
+1. **MERN Stack Application**
+   - MongoDB database
+   - Express.js backend
+   - React frontend
+   - Node.js runtime
+
+2. **Python Application**
+   - AI agent for assisting with form completion
+   - Flask API
+
+3. **PDS Integration**
+   - WebID alias resolution
+   - Credential field mapping
+   - Multi-audience support
+
+## Prerequisites
+
+- Node.js 16+ and npm
+- Python 3.8+ and pip
+- MongoDB
+- Docker and Docker Compose (optional)
+
+## Installation
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/your-organization/fep.git
+cd fep
+```
+
+### 2. Build the application
+
+You can build both the frontend and backend with:
+
+```bash
+npm run build
+```
+
+This will:
+- Install backend dependencies
+- Install frontend dependencies
+- Build the frontend for production
+
+### 3. Set up environment variables
+
+Create `.env` files for both backend and frontend:
+
+```bash
+cp mern-app/backend/.env.template mern-app/backend/.env
+cp mern-app/frontend/.env.template mern-app/frontend/.env
+```
+
+Edit these files to set the required environment variables.
+
+## Running the Application
+
+### Development Mode
+
+To run both frontend and backend in development mode:
+
+```bash
+npm run start:all
+```
+
+Or run them separately:
+
+```bash
+# Run the backend only
+npm run start
+
+# Run the frontend only
+npm run start:frontend
+```
+
+### Production Mode
+
+For production, you should:
+
+1. Build the frontend with `npm run build`
+2. Serve the frontend build using a static server
+3. Run the backend with proper production settings
+
+## Docker Setup
+
+You can also run the application using Docker:
+
+```bash
+docker-compose up -d
+```
+
+## Testing
+
+Run the tests with:
+
+```bash
+npm test
+```
+
+## PDS Integration
+
+This application integrates with the Personal Data Store (PDS) system to:
+
+1. Handle user authentication via OIDC
+2. Retrieve and store verifiable credentials
+3. Map credential fields to application form fields
+4. Support multi-audience requests for different PDS instances
+
+See the documentation in the `/docs` folder for more details on PDS integration.
+
+## License
+
+[MIT](LICENSE)
 
 This repository contains the Financial Entitlement Platform application, which helps users apply for financial entitlements.
 
@@ -41,6 +161,8 @@ This repository contains the Financial Entitlement Platform application, which h
 5. **OneLogin Integration**: Authentication with GOV.UK OneLogin
    - **OIDC Authentication Flow**: Standard OAuth 2.0 flow with OneLogin
    - **WebID Support**: Connect to PDS using OneLogin identity
+   - **WebID Alias Handling**: Support for audience-specific WebID aliases
+   - **DNS Verification**: Domain ownership verification for client registration
    - **Token Management**: Secure storage and refresh of tokens
 
 ## Setup and Running

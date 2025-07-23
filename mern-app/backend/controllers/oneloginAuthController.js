@@ -12,6 +12,39 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fep-service-secret-key';
 const TOKEN_EXPIRY = '8h';
 
 /**
+ * Resolve a WebID alias to its master WebID
+ * If the WebID is already a master WebID, it will be returned unchanged
+ * 
+ * @param {string} webId - The WebID or WebID alias to resolve
+ * @returns {string} The master WebID
+ */
+const resolveWebIdAlias = async (webId) => {
+    try {
+        // Government services receive direct WebIDs, no need to resolve
+        if (process.env.CLIENT_TYPE === 'government') {
+            console.log(`[ONELOGIN] Government service using direct WebID: ${webId}`);
+            return webId;
+        }
+
+        // For private services, resolve the WebID alias
+        const response = await oneloginOAuthClientService.resolveWebId(webId);
+
+        // If resolution was successful, return the master WebID
+        if (response && response.masterWebId) {
+            console.log(`[ONELOGIN] Resolved alias WebID ${webId} to master WebID ${response.masterWebId}`);
+            return response.masterWebId;
+        }
+
+        // If there's no master WebID in the response, assume the WebID is already a master WebID
+        return webId;
+    } catch (error) {
+        console.error(`[ONELOGIN] Error resolving WebID alias ${webId}:`, error);
+        // If resolution fails, just return the original WebID
+        return webId;
+    }
+};
+
+/**
  * Find or create a user based on OneLogin identity
  * 
  * @param {Object} userInfo - User info from OneLogin
@@ -25,6 +58,13 @@ exports.findOrCreateUserFromOneLogin = async (userInfo, tokens) => {
             throw new Error('WebID not found in OneLogin user info');
         }
 
+        // For government services, use the direct WebID
+        // For private services, resolve the WebID alias
+        const webId = await resolveWebIdAlias(userInfo.webid);
+
+        // Track if this is an alias
+        const isAlias = webId !== userInfo.webid;
+
         // Try to find user by email
         let user = null;
         if (userInfo.email) {
@@ -36,16 +76,35 @@ exports.findOrCreateUserFromOneLogin = async (userInfo, tokens) => {
             // Update user with OneLogin info
             const updatedUser = {
                 ...user,
-                webId: userInfo.webid,
+                webId: webId,
                 email: userInfo.email || user.email,
                 name: userInfo.name || user.name,
                 isOneLoginUser: true,
                 oneLoginSubject: userInfo.sub,
                 oneLoginMetadata: {
                     lastLogin: new Date().toISOString(),
-                    tokenExpiry: new Date(Date.now() + tokens.expires_in * 1000).toISOString()
-                }
+                    tokenExpiry: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
+                    serviceType: process.env.CLIENT_TYPE || 'unknown'
+                },
+                webIdAliases: user.webIdAliases || []
             };
+
+            // Add the alias WebID to the user's aliases if it's not already there and it's different from the master WebID
+            if (isAlias && !updatedUser.webIdAliases.includes(userInfo.webid)) {
+                updatedUser.webIdAliases = [...(updatedUser.webIdAliases || []), userInfo.webid];
+
+                // If there's metadata about the alias, store it
+                if (!updatedUser.webIdAliasMetadata) {
+                    updatedUser.webIdAliasMetadata = {};
+                }
+
+                updatedUser.webIdAliasMetadata[userInfo.webid] = {
+                    createdAt: new Date().toISOString(),
+                    serviceType: process.env.CLIENT_TYPE || 'unknown',
+                    serviceName: process.env.SERVICE_NAME || 'FEP Service',
+                    lastUsed: new Date().toISOString()
+                };
+            }
 
             await updateUser(updatedUser);
             return updatedUser;
@@ -55,12 +114,13 @@ exports.findOrCreateUserFromOneLogin = async (userInfo, tokens) => {
         const newUser = {
             name: userInfo.name,
             email: userInfo.email.toLowerCase(),
-            webId: userInfo.webid,
+            webId: webId,
             isOneLoginUser: true,
             oneLoginSubject: userInfo.sub,
             oneLoginMetadata: {
                 lastLogin: new Date().toISOString(),
-                tokenExpiry: new Date(Date.now() + tokens.expires_in * 1000).toISOString()
+                tokenExpiry: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
+                serviceType: process.env.CLIENT_TYPE || 'unknown'
             },
             // Store the access token for PDS operations
             pdsTokens: {
@@ -69,6 +129,21 @@ exports.findOrCreateUserFromOneLogin = async (userInfo, tokens) => {
                 expiresAt: new Date(Date.now() + tokens.expires_in * 1000).toISOString()
             }
         };
+
+        // Initialize WebID aliases array with the alias if it's different from the master WebID
+        if (isAlias) {
+            newUser.webIdAliases = [userInfo.webid];
+            newUser.webIdAliasMetadata = {
+                [userInfo.webid]: {
+                    createdAt: new Date().toISOString(),
+                    serviceType: process.env.CLIENT_TYPE || 'unknown',
+                    serviceName: process.env.SERVICE_NAME || 'FEP Service',
+                    lastUsed: new Date().toISOString()
+                }
+            };
+        } else {
+            newUser.webIdAliases = [];
+        }
 
         await createUser(newUser);
         return newUser;
@@ -102,6 +177,9 @@ exports.validateOneLoginToken = async (req, res) => {
             // Get user info using the token
             const userInfo = await oneloginOAuthClientService.getUserInfo(token);
 
+            // Resolve WebID alias if needed
+            const webId = await resolveWebIdAlias(userInfo.webid);
+
             // Find user by email
             const user = await findUserByEmail(userInfo.email.toLowerCase());
 
@@ -114,12 +192,31 @@ exports.validateOneLoginToken = async (req, res) => {
                 });
             }
 
+            // Update user's WebID and aliases if needed
+            let updatedUser = { ...user };
+            let needsUpdate = false;
+
+            if (user.webId !== webId) {
+                updatedUser.webId = webId;
+                needsUpdate = true;
+            }
+
+            // Add the alias WebID to the user's aliases if it's not already there and it's different from the master WebID
+            if (webId !== userInfo.webid && (!user.webIdAliases || !user.webIdAliases.includes(userInfo.webid))) {
+                updatedUser.webIdAliases = [...(user.webIdAliases || []), userInfo.webid];
+                needsUpdate = true;
+            }
+
+            if (needsUpdate) {
+                await updateUser(updatedUser);
+            }
+
             // Generate a new JWT for FEP service
             const fepToken = jwt.sign(
                 {
-                    email: user.email,
-                    name: user.name,
-                    webId: user.webId
+                    email: updatedUser.email,
+                    name: updatedUser.name,
+                    webId: updatedUser.webId
                 },
                 JWT_SECRET,
                 { expiresIn: TOKEN_EXPIRY }
@@ -129,9 +226,10 @@ exports.validateOneLoginToken = async (req, res) => {
                 token: fepToken,
                 expiresIn: parseInt(TOKEN_EXPIRY) * 3600,
                 user: {
-                    name: user.name,
-                    email: user.email,
-                    webId: user.webId
+                    name: updatedUser.name,
+                    email: updatedUser.email,
+                    webId: updatedUser.webId,
+                    webIdAliases: updatedUser.webIdAliases || []
                 }
             });
         } catch (error) {

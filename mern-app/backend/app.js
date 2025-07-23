@@ -6,6 +6,7 @@ const dotenv = require("dotenv");
 const session = require("express-session");
 const authRoutes = require("./routes/authRoutes");
 const oneloginAuthRoutes = require("./routes/oneloginAuthRoutes");
+const clientRoutes = require("./routes/clientRoutes");
 const formRoutes = require("./routes/formRoutes");
 const evidenceRoutes = require("./routes/evidenceRoutes");
 const aiAgentRoutes = require("./routes/aiAgentRoutes");
@@ -68,6 +69,7 @@ app.use(session({
 // Mount API routes
 app.use("/api/users", authRoutes);  // Changed from /api/auth to /api/users to match frontend
 app.use("/auth", oneloginAuthRoutes); // OneLogin auth routes at /auth endpoint
+app.use("/api/client", clientRoutes); // Client registration routes
 app.use("/api/forms", formRoutes);
 app.use("/api/evidence", evidenceRoutes);
 app.use("/api/ai-agent", aiAgentRoutes);
